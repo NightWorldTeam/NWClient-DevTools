@@ -1,0 +1,25 @@
+# NightWorld Deploy Configuration
+# Target is the base directory for the org.nightworld namespace
+
+target = ".lexplosion/libraries/org/nightworld"
+
+# Each project section: "glob_pattern" = "dest/relative/to/target"
+# Glob pattern is relative to the project root under /workspace
+
+[projects.ReflectionTools]
+"build/libs/*.jar" = "ReflectionTools/1.0/"
+
+[projects.LaunchLinker]
+"build/libs/*.jar" = "LaunchLinker/1.0/"
+
+[projects.MinecraftApi]
+"build/libs/*.jar" = "MinecraftApi/1.0/"
+"build/out/*.jar" = "MinecraftApi/1.0/"
+
+[projects."MinecraftApi.Runtime"]
+"build/libs/*.jar" = "MinecraftApi.Runtime/1.0/"
+"build/out/*.jar" = "MinecraftApi.Runtime/1.0/"
+
+[projects.Cosmetic]
+"build/libs/*.jar" = "Cosmetics/1.0/"
+"build/out/*.jar" = "Cosmetics/1.0/"
