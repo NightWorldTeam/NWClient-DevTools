@@ -227,13 +227,17 @@ def main():
     )
     args = parser.parse_args()
 
-    # JAVA_HOME: CLI arg > env var
-    java_home = args.java_home or os.environ.get("JAVA_HOME")
-
-    # Launch-only mode: skip build and deploy entirely
-    if args.launch_only:
-        rc = launch_game(java_home, dry_run=args.dry_run)
-        sys.exit(rc)
+    # JAVA_HOME priority: CLI arg > deploy.toml > env var
+    java_home = args.java_home
+    if not java_home:
+        try:
+            with open(CONFIG_FILE, "rb") as f:
+                cfg = tomllib.load(f)
+            java_home = cfg.get("java_home", "")
+        except Exception:
+            java_home = ""
+    if not java_home:
+        java_home = os.environ.get("JAVA_HOME", "")
 
     # Determine which projects to build
     if args.all:
