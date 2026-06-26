@@ -1,6 +1,6 @@
 # NWClient Build & Deploy
 
-Automated tools for building NightWorld libraries and deploying the output JARs to your Minecraft development environment.
+Automated tools for building NightWorld libraries (NWClient) and deploying the output JARs to your Minecraft development environment.
 
 ## Quick start
 
