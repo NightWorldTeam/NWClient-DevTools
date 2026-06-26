@@ -428,4 +428,6 @@ FodyWeavers.xsd
 *.msm
 *.msp
 
-deploy.env
+deploy.toml
+launch_nwclient.cmd
+launch_nwclient.sh

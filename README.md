@@ -1,4 +1,4 @@
-# NightWorld Build & Deploy
+# NWClient Build & Deploy
 
 Automated tools for building NightWorld libraries and deploying the output JARs to your Minecraft development environment.
 
@@ -21,7 +21,7 @@ python deploy.py --dry-run
 |---|---|
 | `deploy.toml` | Configuration: target path + JAR copy rules |
 | `deploy.py` | Copies built JARs to the configured target directory |
-| `build.py` | Runs Gradle build + deploy in one step |
+| `build.py` | Runs Gradle build + deploy + optionally launch in one step |
 
 ## Configuration
 
@@ -114,6 +114,12 @@ python build.py --remap
 
 # Use a portable JDK from a folder (no system install needed)
 python build.py --java-home D:/portable/jdk-17
+
+# Build + deploy + launch the game
+python build.py --launch
+
+# Launch the game directly (skip build + deploy)
+python build.py --launch-only
 ```
 
 ### `deploy.py` — deploy only
@@ -190,12 +196,28 @@ $env:JAVA_HOME="D:/portable/jdk-17.0.12" # PowerShell
 python build.py
 ```
 
+## Launch configuration
+
+The `[launch]` section in `deploy.toml` defines the Minecraft launch command. It uses these template variables:
+
+| Variable | Resolves to |
+|---|---|
+| `{java}` | Java executable from `--java-home` or `JAVA_HOME` |
+| `{target}` | The deploy target directory |
+| `{libraries}` | Parent of `target` (the `libraries/` base) |
+| `{root}` | Parent of `libraries` (the `.lexplosion/` root) |
+| `{cpsep}` | Classpath separator (`;` on Windows, `:` on Linux/macOS) |
+| `${VAR}` or `%VAR%` | Environment variable expansion |
+
+To update the command, edit the `command` value in `deploy.toml` under `[launch]`.
+
 ## How it works
 
 1. `build.py` runs `./gradlew build` (with or without `postBuild`) in each requested project
 2. After all builds succeed, it calls `deploy.py`
 3. `deploy.py` reads `deploy.toml`, expands glob patterns per project, and copies matched files to `target`
-4. If a project hasn't been built yet (no matching files), it's silently skipped
+4. If `--launch` is set, `build.py` reads the `[launch]` command from `deploy.toml`, substitutes variables, and runs it
+5. If a project hasn't been built yet (no matching files), it's silently skipped
 
 ## Adding a new project
 
@@ -213,3 +235,5 @@ python build.py
 | Remapped JARs missing on Linux | `postBuild` is Windows-only | Use raw JARs from `build/libs/` or port `remapping.bat` |
 | `tomllib` import error | Python < 3.11 | Run `pip install tomli` or upgrade Python |
 | `JAVA_HOME not set` | No JDK installed/found | Use `--java-home D:/path/to/jdk` with a portable JDK folder |
+| Launch says "no Java" | `--java-home` missing or wrong path | Pass correct `--java-home` (JDK root, bin/, or java.exe) |
+| Launch command broken | Classpath needs updating | Edit the `command` in `deploy.toml`'s `[launch]` section |

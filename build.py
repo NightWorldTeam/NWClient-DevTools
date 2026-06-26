@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 """
-NightWorld Build + Deploy Wrapper.
-Builds the selected project(s) with Gradle, then deploys JARs.
+NightWorld Build + Deploy + Launch Wrapper.
+Builds the selected project(s) with Gradle, deploys JARs, and optionally launches Minecraft.
 
 Usage:
     python build.py                           # builds Cosmetic + deploys
     python build.py MinecraftApi              # builds one project + deploys
-    python build.py MinecraftApi Cosmetic     # builds multiple + deploys
     python build.py --all                     # builds all 5 projects + deploys
-    python build.py --no-deploy               # build only, skip deploy
-    python build.py --remap                   # include remapping (Windows only,
-                                              # runs postBuild which calls remapping.bat)
+    python build.py --launch                  # build + deploy + launch game
     python build.py --java-home C:/jdk-17     # use portable JDK from folder
+    python build.py --java-home C:/jdk/bin/java.exe  # java path auto-resolved
 """
 
 import os
@@ -20,9 +18,13 @@ import subprocess
 import argparse
 from pathlib import Path
 
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib  # type: ignore[no-redef]
+
 WORKSPACE = Path(__file__).parent.resolve()
 
-# All projects in dependency order (safe for --all)
 PROJECTS = [
     "ReflectionTools",
     "LaunchLinker",
@@ -32,10 +34,10 @@ PROJECTS = [
 ]
 
 DEPLOY_SCRIPT = WORKSPACE / "deploy.py"
+CONFIG_FILE = WORKSPACE / "deploy.toml"
 
 
 def find_gradlew(project_dir):
-    """Return the gradlew script path (supports Windows and Unix)."""
     if sys.platform == "win32":
         bat = project_dir / "gradlew.bat"
         if bat.exists():
@@ -46,8 +48,24 @@ def find_gradlew(project_dir):
     return None
 
 
+def resolve_java(java_home):
+    """Resolve --java-home arg to JDK root and java executable."""
+    if not java_home:
+        return None, None
+    p = Path(java_home).resolve()
+    if p.name.lower() in ("java", "java.exe"):
+        exe = p
+        root = p.parent.parent
+    elif p.name.lower() == "bin":
+        exe = p / ("java.exe" if sys.platform == "win32" else "java")
+        root = p.parent
+    else:
+        root = p
+        exe = root / "bin" / ("java.exe" if sys.platform == "win32" else "java")
+    return root, exe
+
+
 def build_project(name, remap=False, java_home=None):
-    """Run ./gradlew build in a project directory. Returns True on success."""
     project_dir = WORKSPACE / name
     if not project_dir.is_dir():
         print(f"  ✗ Project '{name}' not found at {project_dir}")
@@ -60,27 +78,20 @@ def build_project(name, remap=False, java_home=None):
 
     cmd = [gradlew, "build"]
 
-    # remapping.bat runs via cmd.exe — only available on Windows
     if not remap and sys.platform != "win32":
         cmd.extend(["-x", "postBuild"])
 
-    # Prepare environment with custom JAVA_HOME if provided
     env = os.environ.copy()
     if java_home:
-        java_home = Path(java_home).resolve()
-        if java_home.name.lower() in ("java", "java.exe"):
-            java_home = java_home.parent.parent
-        elif java_home.name.lower() == "bin":
-            java_home = java_home.parent
-        env["JAVA_HOME"] = str(java_home)
-        java_bin = java_home / "bin"
-        env["PATH"] = str(java_bin) + os.pathsep + env.get("PATH", "")
+        jdk_root, _ = resolve_java(java_home)
+        if jdk_root:
+            env["JAVA_HOME"] = str(jdk_root)
+            java_bin = jdk_root / "bin"
+            env["PATH"] = str(java_bin) + os.pathsep + env.get("PATH", "")
 
     print(f"\n{'='*60}")
     print(f"  Building: {name}")
     print(f"  Command:  {' '.join(cmd)}")
-    if java_home:
-        print(f"  Java home: {java_home}")
     print(f"{'='*60}")
 
     result = subprocess.run(cmd, cwd=project_dir, env=env)
@@ -88,7 +99,6 @@ def build_project(name, remap=False, java_home=None):
 
 
 def run_deploy(dry_run=False, quiet=False):
-    """Run deploy.py and return its exit code."""
     if not DEPLOY_SCRIPT.exists():
         print(f"  ✗ deploy.py not found at {DEPLOY_SCRIPT}")
         return 1
@@ -104,9 +114,74 @@ def run_deploy(dry_run=False, quiet=False):
     return result.returncode
 
 
+def launch_game(java_home, dry_run=False):
+    """Read [launch] from deploy.toml, substitute variables, and run."""
+    if not CONFIG_FILE.exists():
+        print("  ✗ deploy.toml not found — cannot launch")
+        return 1
+
+    with open(CONFIG_FILE, "rb") as f:
+        data = tomllib.load(f)
+
+    config = data.get("launch", {})
+    command_template = config.get("command", "")
+    if not command_template:
+        print("  ✗ No [launch] section or 'command' in deploy.toml")
+        return 1
+
+    # Resolve Java executable
+    _, java_exe = resolve_java(java_home)
+    if not java_exe or not java_exe.exists():
+        print(f"  ✗ Java not found. Use --java-home or set JAVA_HOME")
+        return 1
+
+    # Read paths from config (explicit > derived from target)
+    target = Path(data.get("target", "")).resolve()
+    libs_cfg = config.get("libraries", "")
+    root_cfg = config.get("root", "")
+    # target = .../libraries/org/nightworld → parent.parent = .../libraries
+    libraries = Path(libs_cfg).resolve() if libs_cfg else target.parent.parent
+    root = Path(root_cfg).resolve() if root_cfg else target.parent.parent.parent
+
+    # Substitute variables
+    subs = {
+        "{java}": str(java_exe),
+        "{target}": str(target),
+        "{libraries}": str(libraries),
+        "{root}": str(root),
+        "{cpsep}": ";" if sys.platform == "win32" else ":",
+    }
+    command = command_template
+    for key, val in subs.items():
+        command = command.replace(key, val)
+
+    # Expand ${VAR} and %VAR% from environment
+    command = os.path.expandvars(command)
+
+    if dry_run:
+        print(f"\n  [DRY-RUN] Would launch:\n")
+        print(f"  {command[:200]}...")
+        print(f"\n  (full command is {len(command)} characters)")
+        return 0
+
+    # Write command to a script file to bypass Windows cmd.exe 8191-char limit
+    if sys.platform == "win32":
+        ext = ".cmd"
+    else:
+        ext = ".sh"
+    launch_file = WORKSPACE / f"launch_nwclient{ext}"
+    launch_file.write_text(command, encoding="utf-8")
+    if ext == ".sh":
+        launch_file.chmod(0o755)
+
+    print(f"\n  Launching Minecraft... (script: {launch_file})\n")
+    subprocess.run(f'"{launch_file}"', shell=True)
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Build NightWorld projects and deploy JARs"
+        description="Build NightWorld projects, deploy JARs, and optionally launch the game"
     )
     parser.add_argument(
         "projects",
@@ -132,18 +207,33 @@ def main():
         "--java-home",
         type=str,
         default=None,
-        help="Path to JDK installation (set JAVA_HOME for Gradle)",
+        help="Path to JDK installation or java.exe",
+    )
+    parser.add_argument(
+        "--launch",
+        action="store_true",
+        help="Launch Minecraft after build + deploy",
+    )
+    parser.add_argument(
+        "--launch-only",
+        action="store_true",
+        help="Launch Minecraft without building (skips build + deploy)",
     )
     parser.add_argument(
         "--dry-run",
         "-n",
         action="store_true",
-        help="Build then show deploy preview without copying",
+        help="Show what would be done without executing",
     )
     args = parser.parse_args()
 
     # JAVA_HOME: CLI arg > env var
     java_home = args.java_home or os.environ.get("JAVA_HOME")
+
+    # Launch-only mode: skip build and deploy entirely
+    if args.launch_only:
+        rc = launch_game(java_home, dry_run=args.dry_run)
+        sys.exit(rc)
 
     # Determine which projects to build
     if args.all:
@@ -153,13 +243,12 @@ def main():
     else:
         to_build = ["Cosmetic"]
 
-    # Validate project names
     for name in to_build:
         if name not in PROJECTS:
             print(f"ERROR: Unknown project '{name}'. Available: {', '.join(PROJECTS)}")
             sys.exit(1)
 
-    # Build each project
+    # Build
     all_ok = True
     for name in to_build:
         ok = build_project(name, remap=args.remap, java_home=java_home)
@@ -178,6 +267,12 @@ def main():
         print("\nBuild complete. Skipping deploy (--no-deploy).")
     else:
         rc = run_deploy(dry_run=args.dry_run)
+        if rc != 0:
+            sys.exit(rc)
+
+    # Launch (if --launch)
+    if args.launch:
+        rc = launch_game(java_home, dry_run=args.dry_run)
         sys.exit(rc)
 
 
