@@ -42,6 +42,27 @@ git add Cosmetic MinecraftApi MinecraftApi.Runtime LaunchLinker ReflectionTools
 git commit -m "chore: update NWClient submodule pins"
 ```
 
+## Launcher defaults and local account settings
+
+On Windows, omitted paths default to:
+
+- `root` = `%APPDATA%/.lexplosion`
+- `libraries` = `%APPDATA%/.lexplosion/libraries`
+- `target` = `%APPDATA%/.lexplosion/libraries/org/nightworld`
+- Java = the Gradle JDK passed via `NW_DEV_JAVA`
+
+Create a private `deploy.toml` with the launcher's verified, current
+`[launch].command`. Do not commit or upload it: that command may carry
+live Minecraft session credentials. The example now uses placeholder
+environment variables `NW_ACCESS_TOKEN`, `NW_UUID`, `NW_USERNAME`,
+`NW_CLIENT_ID`, and `NW_XUID`, which **must not be invented**. If
+your launcher does not provide an optional identifier, remove its
+argument from your private development command when supported by the
+launcher rather than supplying a fake value.
+
+The launcher stops before deployment when variables are unresolved
+and reports variable *names only*.
+
 ## Vanilla development cycle
 
 Run from the workspace root on Windows:
