@@ -35,5 +35,37 @@ class IntelliJF5Tests(unittest.TestCase):
         self.assertIn("tasks.register('devDebugStart', Exec)", build)
 
 
+
+    def test_reuse_jdwp_when_our_own_process_is_already_listening(self):
+        from unittest import mock
+        import nwclient_debug_start as helper
+        with mock.patch.object(helper, "same_workspace_java_is_running", return_value=True), \
+             mock.patch.object(helper, "port_is_available", return_value=False):
+            self.assertTrue(helper.reuse_existing_debug_jvm(Path("C:/nwclient")))
+
+    def test_foreign_process_occupying_port_is_rejected(self):
+        from unittest import mock
+        import nwclient_debug_start as helper
+        with mock.patch.object(helper, "same_workspace_java_is_running", return_value=False), \
+             mock.patch.object(helper, "port_is_available", return_value=False):
+            with self.assertRaisesRegex(ValueError, "occupied by another process"):
+                helper.reuse_existing_debug_jvm(Path("C:/nwclient"))
+
+    def test_previous_game_without_jdwp_prevents_duplicate_launch(self):
+        from unittest import mock
+        import nwclient_debug_start as helper
+        with mock.patch.object(helper, "same_workspace_java_is_running", return_value=True), \
+             mock.patch.object(helper, "port_is_available", return_value=True):
+            with self.assertRaisesRegex(ValueError, "still running"):
+                helper.reuse_existing_debug_jvm(Path("C:/nwclient"))
+
+    def test_new_game_can_start_on_free_port(self):
+        from unittest import mock
+        import nwclient_debug_start as helper
+        with mock.patch.object(helper, "same_workspace_java_is_running", return_value=False), \
+             mock.patch.object(helper, "port_is_available", return_value=True):
+            self.assertFalse(helper.reuse_existing_debug_jvm(Path("C:/nwclient"))
+
+
 if __name__ == "__main__":
     unittest.main()

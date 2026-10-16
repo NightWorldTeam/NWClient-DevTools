@@ -108,9 +108,15 @@ Run Another Configuration**, select `NWClient - Start Debug JVM`,
 and **Store as project file**. The shared Remote configuration should show
 `127.0.0.1:5005` as the target.
 
+If `NWClient - Start Debug JVM` was launched manually and is already
+waiting for the debugger on port 5005, the F5 prelaunch task **reuses that
+same JVM** rather than trying to start another. The existing process is
+matched against its saved PID and expected Java executable. An unrelated
+process on port 5005 remains an error.
+
 Closing the IDE debugger might leave the game open. Close Minecraft
-before a new debug launch, because JDWP port 5005 can be owned by only one
-Minecraft instance. The launcher uses the same installation-path precedence
+before starting a **fresh** debug launch, because JDWP port 5005 can be
+owned by only one Minecraft instance. The launcher uses the same installation-path precedence
 and offline identity as `devRun`, and does not change installed JARs.
 
 `devRun` remains available for normal launches. IntelliJ's **Debug**

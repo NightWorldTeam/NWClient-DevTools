@@ -19,17 +19,84 @@ LOG_FILE = dev.WORKSPACE / "build" / "dev-logs" / "minecraft-debug.log"
 PID_FILE = dev.WORKSPACE / "build" / "dev-logs" / "minecraft-debug.pid"
 
 
-def ensure_port_available():
-    # Never connect to JDWP for readiness probing: some JVMs accept only
-    # one debugger connection and a probe would consume it.
+def port_is_available():
+    """Check localhost:5005 without connecting to its single-user JDWP socket."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         try:
             sock.bind(("127.0.0.1", PORT))
         except OSError:
-            raise ValueError(
-                "JDWP port 5005 is occupied. Close the previous Minecraft "
-                "debug session before launching another."
-            ) from None
+            return False
+        return True
+
+
+def same_workspace_java_is_running(game_root):
+    """Check PID file against the actual Windows process and Java executable."""
+    if not PID_FILE.is_file():
+        return False
+    try:
+        pid = int(PID_FILE.read_text(encoding="ascii").strip())
+        if pid <= 0:
+            return False
+
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel32.WaitForSingleObject.restype = wintypes.DWORD
+        kernel32.QueryFullProcessImageNameW.argtypes = [
+            wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR,
+            ctypes.POINTER(wintypes.DWORD)
+        ]
+        kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel32.CloseHandle.restype = wintypes.BOOL
+
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return False
+        try:
+            if kernel32.WaitForSingleObject(handle, 0) != 0x102:  # WAIT_TIMEOUT: alive
+                return False
+            executable = ctypes.create_unicode_buffer(32768)
+            length = wintypes.DWORD(len(executable))
+            if not kernel32.QueryFullProcessImageNameW(
+                handle, 0, executable, ctypes.byref(length)
+            ):
+                return False
+            actual_java = os.path.normcase(os.path.abspath(executable.value))
+            expected_java = os.path.normcase(str(dev.java_executable(game_root)))
+            return actual_java == expected_java
+        finally:
+            kernel32.CloseHandle(handle)
+    except (OSError, ValueError, OverflowError):
+        # A missing/stale PID file or inaccessible process is not ownership proof.
+        return False
+
+
+def reuse_existing_debug_jvm(game_root):
+    """Return True only for a live JVM launched by this workspace."""
+    running = same_workspace_java_is_running(game_root)
+    available = port_is_available()
+
+    if running and not available:
+        print("Minecraft debug JVM already running from this workspace.")
+        print("Reusing JDWP listener at 127.0.0.1:5005 for IntelliJ.")
+        return True
+    if running and available:
+        raise ValueError(
+            "The previous Minecraft JVM is still running, but JDWP is not "
+            "listening on port 5005. Close Minecraft before starting a new "
+            "debug session."
+        )
+    if not available:
+        raise ValueError(
+            "JDWP port 5005 is already occupied by another process. Close it "
+            "before launching NWClient debugging."
+        )
+    return False
 
 
 def await_ready(process):
@@ -57,12 +124,15 @@ def start():
     if os.name != "nt":
         raise ValueError("This launcher currently requires Windows.")
     game_root, libraries, staged, source = dev.validate_files()
-    cmd = dev.make_command(game_root, libraries, staged, debug=True)
+    # F5 may be pressed after the standalone "Start Debug JVM" run. Reuse
+    # the same live JVM instead of failing with an occupied JDWP port.
+    if reuse_existing_debug_jvm(game_root):
+        return 0
 
+    cmd = dev.make_command(game_root, libraries, staged, debug=True)
     if cmd.count(dev.JDWP) != 1:
         raise ValueError("Unexpected Minecraft JVM debugging options.")
     cmd = cmd.replace(dev.JDWP, dev.JDWP.replace("suspend=n", "suspend=y"))
-    ensure_port_available()
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     with LOG_FILE.open("wb") as log:
