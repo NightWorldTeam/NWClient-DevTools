@@ -1,3 +1,19 @@
+# NWClient Development Workspace
+
+The current IntelliJ IDEA Community 2025.2 development workflow lives on
+the **`new-architecture`** branch. See [WORKSPACE.md](WORKSPACE.md) for
+setup, Gradle tasks, debugger configuration, XML Hot Reload, Java HotSwap,
+submodule versions, and installation detection.
+
+Confirmed on Windows: Minecraft debugger connection, Java breakpoints,
+`devClasses`, `devPrepare`, `devCheck`, XML UI Hot Reload, and standard
+method-body Java HotSwap. Java changes involving Minecraft remapped symbols
+and structural class edits may still require a restart.
+
+The older standalone build/deploy tools are documented below for compatibility.
+
+---
+
 # NWClient Build & Deploy
 
 Automated tools for building NightWorld libraries (NWClient) and deploying the output JARs to your Minecraft development environment.

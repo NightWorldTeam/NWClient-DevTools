@@ -1,13 +1,13 @@
-# Unified workspace experiment
+# NWClient development workspace
 
-This is an experimental **multi-repository Gradle workspace** on the
-`experiment/unified-workspace` branch. The five Java repositories remain
+This is the **multi-repository Gradle development workspace** on the
+`new-architecture` branch. The five Java repositories remain
 independent Git repositories; this repo pins them as **real Git submodules**.
 
 ## Get started
 
 ```powershell
-git clone --branch experiment/unified-workspace --recurse-submodules https://github.com/NightWorldTeam/NWClient-DevTools.git NWClient-Workspace-Test
+git clone --branch new-architecture --recurse-submodules https://github.com/NightWorldTeam/NWClient-DevTools.git NWClient-Workspace-Test
 cd NWClient-Workspace-Test
 ```
 
@@ -28,8 +28,8 @@ It will be checked out together with the rest of the workspace.
 | Directory | Branch for explicit updates | Pinned commit |
 | --- | --- | --- |
 | Cosmetic | new-architecture | 16418d77cbf9c3bb75321720abb747a950ece50c |
-| MinecraftApi | experiment/unified-workspace-hot-reload | ffe626789382154f187fdc785e14f6f3340828e4 |
-| MinecraftApi.Runtime | experiment/unified-workspace-compat | 1b9acde093164cc8b8ec12c1faf76f2557492dd3 |
+| MinecraftApi | new-architecture | ffe626789382154f187fdc785e14f6f3340828e4 |
+| MinecraftApi.Runtime | new-architecture-compat | 1b9acde093164cc8b8ec12c1faf76f2557492dd3 |
 | LaunchLinker | new-architecture | 3fbb477c08a37140986b3212646784e5db929341 |
 | ReflectionTools | main | 9c2fa0ab48c3aacea24b352289d1269b2aaa8958 |
 
@@ -124,7 +124,7 @@ button on a Gradle task by itself debugs the Gradle process, not Minecraft;
 use the provided **Remote JVM Debug** configuration.
 
 The IntelliJ configuration files have static XML tests, but
-an actual full F5 → Minecraft debugging run is not yet Windows-verified.
+an actual full IntelliJ Debug → Minecraft session, including breakpoints, was confirmed on Windows.
 
 ## Plug-and-play Windows development
 
@@ -171,9 +171,7 @@ the default offline dev tasks use only their installation path fields.
 
 ### Current validation status
 
-The Windows test confirmed `devClasses` and `devPrepare` built
-successfully. The new config-free offline game launch still needs an
-end-to-end local Windows test.
+Windows testing confirmed `devClasses`, `devPrepare`, `devCheck`, IntelliJ\'s Minecraft debugger and working breakpoints. XML Hot Reload and Java HotSwap of a method body in `TabControl` were also verified in Minecraft.
 
 ## Java HotSwap — IntelliJ IDEA Community 2025.2
 
@@ -228,8 +226,8 @@ cannot change those user preferences through the shared `.run` files.
 
 ## XML / XAML Hot Reload (experimental)
 
-The workspace pins the experimental `MinecraftApi` branch
-`experiment/unified-workspace-hot-reload`. The launch tasks `devRun` and
+The workspace pins the `MinecraftApi` branch
+`new-architecture`. The launch tasks `devRun` and
 `devDebugStart` pass the **workspace root** using the JVM property
 `nwclient.xaml.dir`. MinecraftApi.XamlView then reads edited XAML source files
 from `Cosmetic/src/main/resources/assets/nightworld/cosmetic/ui/` without
@@ -252,7 +250,7 @@ The feature watches files only when the JVM option is set. Production builds
 and the normal installed launcher do not gain file polling. The JAR packaged
 resource remains the fallback if an XML source file is unavailable.
 
-**Not yet tested in a full Windows Minecraft session.** This is an
+**Verified in a Windows Minecraft session.** This is an
 experimental source-watching implementation, not Java class HotSwap or a
 general external filesystem watcher.
 
