@@ -42,15 +42,49 @@ git add Cosmetic MinecraftApi MinecraftApi.Runtime LaunchLinker ReflectionTools
 git commit -m "chore: update NWClient submodule pins"
 ```
 
+## Vanilla development cycle
+
+Run from the workspace root on Windows:
+
+```powershell
+git pull
+git submodule update --init --recursive
+.\Cosmetic\gradlew.bat -p . devPrepare
+.\Cosmetic\gradlew.bat -p . devRun
+# or, for an IDE remote Java debugger on localhost:5005
+.\Cosmetic\gradlew.bat -p . devDebug
+```
+
+The Vanilla preparation tasks compile Java, package raw JARs, remap only the
+Vanilla variant, append the member metadata, and stage five artifacts under
+`build/dev-artifacts/`. These tasks are incremental within this workspace.
+
+Before `devRun`, configure a **private, gitignored** `deploy.toml` with the
+correct `target`, `java_home`, and `[launch].command`. The launch command
+must reference the expected five staged JAR names in the classpath.
+`nwclient_dev.py` will fail instead of silently deploying stale artifacts
+if any filename is missing. It then copies only those five JARs to the
+configured development installation and starts Minecraft with its local profile.
+
+`devDebug` additionally opens the JDWP debugger on
+`127.0.0.1:5005`. Attach the IDE's Remote JVM Debugger there.
+The launcher command and any credentials are deliberately never printed or
+written to a generated .cmd file. **Do not reuse credentials committed in
+example files; use your own local development session.**
+
+The current remapping converter and member tool are Windows executables;
+`devPrepare` therefore requires Windows with their existing prerequisites
+installed. A successful in-game launch has not yet been verified.
+
 ## Current scope
 
 - `devClasses`: incrementally compile both Cosmetic and MinecraftApi.Runtime (plus dependencies), without intentionally invoking packaging/remapping. All Java compile tasks use UTF-8 in this workspace.
 - `devBuild`: run the current module build tasks. These still include the
   child projects' Windows-only `postBuild` remapping, which is not optimized yet.
-- Minecraft launch, deploy, debugger, and Live Reload are **not** integrated into
-  the new Gradle workspace yet. The pre-existing `build.py` and `deploy.py`
-  remain available, but they predate this root multi-project build.
-- User testing identified Windows-1252 compiler errors and a missing Runtime scissor contract; the workspace now forces UTF-8 and pins a compatibility fix on `MinecraftApi.Runtime/experiment/unified-workspace-compat`. Verify with `devClasses --rerun-tasks`. A complete successful build or Minecraft launch has not yet been verified.
+- `devPrepare`, `devRun` and `devDebug` now exist as experimental tasks. The
+  existing `build.py` and `deploy.py` remain available but are not invoked
+  by these tasks. XML Live Reload is not implemented yet.
+- User testing identified Windows-1252 compiler errors and a missing Runtime scissor contract; the workspace now forces UTF-8 and pins a compatibility fix on `MinecraftApi.Runtime/experiment/unified-workspace-compat`. Verify with `devClasses --rerun-tasks`. The user has confirmed `devClasses --rerun-tasks` succeeded (10 tasks in 2s), but `devPrepare` and an actual Minecraft launch have not yet been verified.
 
 Do not store Minecraft access tokens or expanded launch commands in committed
 configuration, CI logs, or shared scripts.
