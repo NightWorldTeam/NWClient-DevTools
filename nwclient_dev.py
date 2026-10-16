@@ -59,8 +59,11 @@ def run(debug=False):
     with CONFIG.open("rb") as stream:
         config = tomllib.load(stream)
     launch = config.get("launch", {})
-    if not config.get("target") or not launch.get("command"):
-        raise ValueError("deploy.toml requires target and [launch].command.")
+    if not launch.get("command"):
+        raise ValueError(
+            "deploy.toml needs [launch].command from your local launcher profile. "
+            "Paths default to %APPDATA%/.lexplosion when not specified."
+        )
 
     staged = []
     for folder in DIRECTORIES:
@@ -75,9 +78,21 @@ def run(debug=False):
         raise ValueError("Launch classpath does not reference the staged dev JARs: "
                          + ", ".join(missing))
 
-    target = absolute(config["target"])
-    libraries = absolute(launch["libraries"]) if launch.get("libraries") else target.parent.parent
-    game_root = absolute(launch["root"]) if launch.get("root") else libraries.parent
+    # The NW launcher installs by default under %APPDATA%/.lexplosion.
+    # Local overrides still work for independent test installations.
+    if launch.get("root"):
+        game_root = absolute(launch["root"])
+    elif launch.get("libraries"):
+        game_root = absolute(launch["libraries"]).parent
+    else:
+        appdata = os.environ.get("APPDATA")
+        if not appdata:
+            raise ValueError(
+                "APPDATA is missing. Set [launch].root explicitly in deploy.toml."
+            )
+        game_root = absolute(appdata) / ".lexplosion"
+    libraries = absolute(launch["libraries"]) if launch.get("libraries") else game_root / "libraries"
+    target = absolute(config["target"]) if config.get("target") else libraries / "org" / "nightworld"
 
     # A relative target from the sample config otherwise silently deploys to
     # workspace/.lexplosion while the launch command loads the real installation.
@@ -108,8 +123,16 @@ def run(debug=False):
     }.items():
         command = command.replace(name, value)
     command = os.path.expandvars(command)
-    if re.search(r"\$\{[A-Za-z_]\w*\}|%[A-Za-z_]\w*%", command):
-        raise ValueError("Launch profile contains an unresolved environment variable.")
+    unresolved = re.findall(r"\$\{([A-Za-z_]\w*)\}|%([A-Za-z_]\w*)%", command)
+    if unresolved:
+        # Show only variable NAMES, never expanded credentials or the command.
+        names = ", ".join(sorted({left or right for left, right in unresolved}))
+        raise ValueError(
+            "Unresolved launcher environment variables: " + names
+            + ". Set them in the local environment or remove the optional "
+              "arguments that refer to them from deploy.toml. "
+              "Use fresh authentication data from your launcher."
+        )
     if "{java}" in command or "{target}" in command or "{libraries}" in command:
         raise ValueError("Launch profile contains an unresolved placeholder.")
 
