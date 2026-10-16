@@ -42,7 +42,12 @@ def java_path(config):
             raise ValueError("JDK 17 not found; configure java_home in deploy.toml.")
         path = Path(found)
     if not path.is_file():
-        raise ValueError("Configured Java executable is missing.")
+        raise ValueError(
+            "Configured Java executable is missing. The java_home value in "
+            "deploy.toml is resolved relative to the workspace. Remove the "
+            "java_home line to use the JDK supplied by Gradle, or specify an "
+            "absolute path to a valid Java 17 installation."
+        )
     return path
 
 
@@ -73,6 +78,21 @@ def run(debug=False):
     target = absolute(config["target"])
     libraries = absolute(launch["libraries"]) if launch.get("libraries") else target.parent.parent
     game_root = absolute(launch["root"]) if launch.get("root") else libraries.parent
+
+    # A relative target from the sample config otherwise silently deploys to
+    # workspace/.lexplosion while the launch command loads the real installation.
+    expected_target = (libraries / "org" / "nightworld").resolve()
+    if os.path.normcase(str(target)) != os.path.normcase(str(expected_target)):
+        raise ValueError(
+            "deploy.toml target and [launch].libraries refer to different "
+            "installations. Set target to <libraries>/org/nightworld before "
+            "running devRun; no JARs have been copied."
+        )
+    if os.path.normcase(str(game_root)) != os.path.normcase(str(libraries.parent)):
+        raise ValueError(
+            "deploy.toml [launch].root and [launch].libraries refer to "
+            "different installations; no JARs have been copied."
+        )
 
     # Insert JDWP immediately after the Java executable, respecting quotes.
     if '"{java}"' not in command:
