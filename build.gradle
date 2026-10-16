@@ -29,6 +29,10 @@ def modules = [
 ]
 def outputs = [:]
 
+// Child module properties (gameVersion, version) and jar tasks are only
+// available after their build.gradle files have been evaluated. Keep this
+// wrapper-specific task registration deferred until every project is ready.
+gradle.projectsEvaluated {
 modules.each { spec ->
     def module = spec.module
     def version = module.property('gameVersion').toString()
@@ -111,6 +115,8 @@ tasks.register('devPrepare', Sync) {
     from(project(':ReflectionTools').tasks.named('jar',Jar).flatMap { it.archiveFile }) {
         into 'ReflectionTools/1.0'
     }
+}
+
 }
 
 def pythonExe = providers.gradleProperty('nwPython').orElse('python')
