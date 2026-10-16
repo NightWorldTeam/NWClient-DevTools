@@ -42,6 +42,32 @@ git add Cosmetic MinecraftApi MinecraftApi.Runtime LaunchLinker ReflectionTools
 git commit -m "chore: update NWClient submodule pins"
 ```
 
+## Installation discovery
+
+The default offline dev launcher searches for a complete NWLauncher
+installation in this exact order:
+
+1. `NWCLIENT_HOME` — developer's custom game-data directory, if valid
+2. `%APPDATA%/.lexplosion` — the standard NWLauncher game-data directory
+3. `deploy.toml` — only if neither of the first two contains the required
+   `libraries`, `assets`, and `instances/nwclient dev/version/client.jar`
+
+An invalid candidate is skipped. If the fallback is needed but no
+`deploy.toml` exists, `devRun`/`devCheck` stops with a helpful error.
+
+The minimum private fallback configuration is:
+
+```toml
+[launch]
+root = "D:/Games/NightWorld"
+```
+
+Instead of `[launch].root`, the fallback also supports
+`[launch].libraries` or top-level `target` (pointing to
+`libraries/org/nightworld`). These fields must describe the same installation.
+The launch command, account token and Java path are **not** read from
+`deploy.toml` by the offline development tasks.
+
 ## Plug-and-play Windows development
 
 The default tasks are intentionally **configuration-free**:
