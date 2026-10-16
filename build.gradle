@@ -1,29 +1,134 @@
 plugins {
     id 'base'
 }
-
 description = 'Experimental NWClient multi-project developer workspace'
 
-// Ensure Windows default charset does not corrupt UTF-8 Java source files.
-// The original projects remain independent; this setting applies only when
-// compiling them through the unified workspace.
 subprojects {
-    tasks.withType(JavaCompile).configureEach {
-        options.encoding = 'UTF-8'
-    }
+    tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 }
 
 tasks.register('devClasses') {
     group = 'nwclient dev'
-    description = 'Incrementally compile Cosmetics, Runtime and their dependencies'
+    description = 'Incrementally compile Cosmetics, Runtime and dependencies'
     dependsOn(':Cosmetics:classes', ':MinecraftApi.Runtime:classes')
 }
 
 tasks.register('devBuild') {
     group = 'nwclient dev'
-    description = 'Build NWClient projects using their existing Gradle tasks'
-    dependsOn(':LaunchLinker:build', ':MinecraftApi:build', ':MinecraftApi.Runtime:build', ':Cosmetics:build')
+    description = 'Run existing full builds (including legacy Fabric/Forge remapping)'
+    dependsOn(':LaunchLinker:build', ':MinecraftApi:build',
+              ':MinecraftApi.Runtime:build', ':Cosmetics:build')
 }
 
-// Launch and deploy remain separate until their native runtime configuration
-// and credentials can be handled safely.
+// The original batch scripts always remap three variants. These tasks run
+// only the Vanilla steps, including the existing member metadata conversion.
+def modules = [
+    [label:'MinecraftApi', module:project(':MinecraftApi'), member:'nw_minecraft_api_members.json'],
+    [label:'Runtime', module:project(':MinecraftApi.Runtime'), member:'nw_minecraft_api_runtime_members.json'],
+    [label:'Cosmetics', module:project(':Cosmetics'), member:'nw_cosmetic_members.json']
+]
+def outputs = [:]
+
+modules.each { spec ->
+    def module = spec.module
+    def version = module.property('gameVersion').toString()
+    def srcMapping = new File(module.projectDir, "remapping/mappings/${version}/sources/vanilla.txt")
+    def tinyMapping = new File(module.projectDir, "remapping/mappings/${version}/vanilla.tiny")
+    def converter = new File(module.projectDir, 'remapping/MappingsConverter.exe')
+    def tinyTool = new File(module.projectDir, 'remapping/tiny.jar')
+    def membersTool = new File(module.projectDir, 'remapping/LibMembersRemapper.exe')
+    def membersJson = new File(module.projectDir, 'members.json')
+    def clientJar = new File(module.projectDir, "dependecies/${version}/client.jar")
+    def vanillaJar = new File(module.buildDir, "out/${module.name}-vanilla-${module.version}.jar")
+    def rawArchive = module.tasks.named('jar', Jar).flatMap { it.archiveFile }
+    def apiArchive = spec.label == 'Cosmetics' ?
+        project(':MinecraftApi').tasks.named('jar', Jar).flatMap { it.archiveFile } : null
+    def membersDir = layout.buildDirectory.dir("dev-members/${spec.label}").get().asFile
+
+    def mapping = tasks.register("dev${spec.label}Mappings", Exec) {
+        group = 'nwclient dev'
+        inputs.files(srcMapping, converter)
+        outputs.file(tinyMapping)
+        doFirst {
+            if (!srcMapping.isFile()) throw new GradleException("Missing Vanilla mappings: ${srcMapping}")
+            tinyMapping.parentFile.mkdirs()
+        }
+        executable = converter.absolutePath
+        args 'convert','proguard','tiny',srcMapping.absolutePath,tinyMapping.absolutePath
+    }
+
+    def remap = tasks.register("dev${spec.label}Vanilla") {
+        group = 'nwclient dev'
+        dependsOn(module.tasks.named('jar', Jar), mapping)
+        if (apiArchive != null) dependsOn(project(':MinecraftApi').tasks.named('jar', Jar))
+        inputs.file(rawArchive)
+        inputs.files(tinyMapping, tinyTool, membersTool, membersJson, srcMapping, clientJar)
+        if (apiArchive != null) inputs.file(apiArchive)
+        outputs.file(vanillaJar)
+        doLast {
+            if (!System.getProperty('os.name').toLowerCase().contains('windows'))
+                throw new GradleException('The existing remapping helpers require Windows')
+            def java = new File(System.getProperty('java.home'),'bin/java.exe').absolutePath
+            def jar = new File(System.getProperty('java.home'),'bin/jar.exe').absolutePath
+            def rawFile = rawArchive.get().asFile
+            if (!rawFile.isFile() || !clientJar.isFile())
+                throw new GradleException("Missing input JAR: ${rawFile} or ${clientJar}")
+            vanillaJar.parentFile.mkdirs()
+            def remapArgs = [java,'-jar',tinyTool.absolutePath,rawFile.absolutePath,
+                             vanillaJar.absolutePath,tinyMapping.absolutePath,
+                             'left','right',clientJar.absolutePath]
+            if (apiArchive != null) remapArgs.add(apiArchive.get().asFile.absolutePath)
+            project.exec { commandLine remapArgs }
+
+            project.delete(membersDir)
+            membersDir.mkdirs()
+            project.exec {
+                commandLine membersTool.absolutePath, membersJson.absolutePath,
+                    new File(membersDir,spec.member).absolutePath,srcMapping.absolutePath
+            }
+            if (!new File(membersDir,spec.member).isFile())
+                throw new GradleException("Missing converted member metadata for ${spec.label}")
+            project.exec {
+                commandLine jar,'-u','-f',vanillaJar.absolutePath,'-C',membersDir.absolutePath,'.'
+            }
+        }
+    }
+    outputs[spec.label] = [task:remap, file:vanillaJar]
+}
+
+tasks.register('devPrepare', Sync) {
+    group = 'nwclient dev'
+    description = 'Build and stage exactly five Vanilla development JARs'
+    dependsOn(outputs.values().collect { it.task })
+    dependsOn(':LaunchLinker:jar',':ReflectionTools:jar')
+    into layout.buildDirectory.dir('dev-artifacts')
+    from(outputs.MinecraftApi.file) { into 'MinecraftApi/1.0' }
+    from(outputs.Runtime.file) { into 'MinecraftApi.Runtime/1.0' }
+    from(outputs.Cosmetics.file) { into 'Cosmetics/1.0' }
+    from(project(':LaunchLinker').tasks.named('jar',Jar).flatMap { it.archiveFile }) {
+        into 'LaunchLinker/1.0'
+    }
+    from(project(':ReflectionTools').tasks.named('jar',Jar).flatMap { it.archiveFile }) {
+        into 'ReflectionTools/1.0'
+    }
+}
+
+def pythonExe = providers.gradleProperty('nwPython').orElse('python')
+tasks.register('devRun', Exec) {
+    group = 'nwclient dev'
+    description = 'Prepare and run Minecraft with the LOCAL deploy.toml profile'
+    dependsOn 'devPrepare'
+    workingDir rootProject.projectDir
+    executable pythonExe.get()
+    args 'nwclient_dev.py','run'
+    environment 'NW_DEV_JAVA', new File(System.getProperty('java.home'),'bin/java.exe').absolutePath
+}
+tasks.register('devDebug', Exec) {
+    group = 'nwclient dev'
+    description = 'Prepare and run Minecraft with JDWP on localhost:5005'
+    dependsOn 'devPrepare'
+    workingDir rootProject.projectDir
+    executable pythonExe.get()
+    args 'nwclient_dev.py','debug'
+    environment 'NW_DEV_JAVA', new File(System.getProperty('java.home'),'bin/java.exe').absolutePath
+}
