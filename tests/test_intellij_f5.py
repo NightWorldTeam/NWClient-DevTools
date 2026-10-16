@@ -36,6 +36,11 @@ class IntelliJF5Tests(unittest.TestCase):
 
 
 
+    def test_windows_process_rights_allow_wait_for_single_object(self):
+        source = (ROOT / "nwclient_debug_start.py").read_text(encoding="utf-8")
+        self.assertIn("SYNCHRONIZE = 0x00100000", source)
+        self.assertIn("PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE", source)
+
     def test_reuse_jdwp_when_our_own_process_is_already_listening(self):
         from unittest import mock
         import nwclient_debug_start as helper

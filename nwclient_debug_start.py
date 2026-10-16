@@ -54,7 +54,13 @@ def same_workspace_java_is_running(game_root):
         kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
         kernel32.CloseHandle.restype = wintypes.BOOL
 
-        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        # WaitForSingleObject requires SYNCHRONIZE in addition to query rights.
+        # Omitting SYNCHRONIZE made live Minecraft PIDs appear dead (WAIT_FAILED).
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        SYNCHRONIZE = 0x00100000
+        handle = kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, False, pid
+        )
         if not handle:
             return False
         try:
