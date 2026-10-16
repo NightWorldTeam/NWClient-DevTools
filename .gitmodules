@@ -9,7 +9,7 @@
 [submodule "MinecraftApi.Runtime"]
 	path = MinecraftApi.Runtime
 	url = https://github.com/NightWorldTeam/MinecraftApi.Runtime.git
-	branch = main
+	branch = experiment/unified-workspace-compat
 [submodule "LaunchLinker"]
 	path = LaunchLinker
 	url = https://github.com/NightWorldTeam/LaunchLinker.git

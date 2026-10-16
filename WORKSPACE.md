@@ -29,7 +29,7 @@ It will be checked out together with the rest of the workspace.
 | --- | --- | --- |
 | Cosmetic | new-architecture | 16418d77cbf9c3bb75321720abb747a950ece50c |
 | MinecraftApi | new-architecture | cb094de3532c636f542e93743908d10fcd9bc98e |
-| MinecraftApi.Runtime | main | 4cfb74010aaa92e64b45a5657d5602c03f22c0aa |
+| MinecraftApi.Runtime | experiment/unified-workspace-compat | 1b9acde093164cc8b8ec12c1faf76f2557492dd3 |
 | LaunchLinker | new-architecture | 3fbb477c08a37140986b3212646784e5db929341 |
 | ReflectionTools | main | 9c2fa0ab48c3aacea24b352289d1269b2aaa8958 |
 
@@ -44,13 +44,13 @@ git commit -m "chore: update NWClient submodule pins"
 
 ## Current scope
 
-- `devClasses`: compile existing Gradle projects incrementally, without intentionally invoking packaging/remapping.
+- `devClasses`: incrementally compile both Cosmetic and MinecraftApi.Runtime (plus dependencies), without intentionally invoking packaging/remapping. All Java compile tasks use UTF-8 in this workspace.
 - `devBuild`: run the current module build tasks. These still include the
   child projects' Windows-only `postBuild` remapping, which is not optimized yet.
 - Minecraft launch, deploy, debugger, and Live Reload are **not** integrated into
   the new Gradle workspace yet. The pre-existing `build.py` and `deploy.py`
   remain available, but they predate this root multi-project build.
-- No builds or Minecraft launches have been tested in this branch.
+- User testing identified Windows-1252 compiler errors and a missing Runtime scissor contract; the workspace now forces UTF-8 and pins a compatibility fix on `MinecraftApi.Runtime/experiment/unified-workspace-compat`. Verify with `devClasses --rerun-tasks`. A complete successful build or Minecraft launch has not yet been verified.
 
 Do not store Minecraft access tokens or expanded launch commands in committed
 configuration, CI logs, or shared scripts.
