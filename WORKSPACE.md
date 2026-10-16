@@ -42,70 +42,63 @@ git add Cosmetic MinecraftApi MinecraftApi.Runtime LaunchLinker ReflectionTools
 git commit -m "chore: update NWClient submodule pins"
 ```
 
-## Launcher defaults and local account settings
+## Plug-and-play Windows development
 
-On Windows, omitted paths default to:
+The default tasks are intentionally **configuration-free**:
 
-- `root` = `%APPDATA%/.lexplosion`
-- `libraries` = `%APPDATA%/.lexplosion/libraries`
-- `target` = `%APPDATA%/.lexplosion/libraries/org/nightworld`
-- Java = the Gradle JDK passed via `NW_DEV_JAVA`
-
-Create a private `deploy.toml` with the launcher's verified, current
-`[launch].command`. Do not commit or upload it: that command may carry
-live Minecraft session credentials. The example now uses placeholder
-environment variables `NW_ACCESS_TOKEN`, `NW_UUID`, `NW_USERNAME`,
-`NW_CLIENT_ID`, and `NW_XUID`, which **must not be invented**. If
-your launcher does not provide an optional identifier, remove its
-argument from your private development command when supported by the
-launcher rather than supplying a fake value.
-
-The launcher stops before deployment when variables are unresolved
-and reports variable *names only*.
-
-## Vanilla development cycle
-
-Run from the workspace root on Windows:
-
-```powershell
+\`\`\`powershell
 git pull
 git submodule update --init --recursive
-.\Cosmetic\gradlew.bat -p . devPrepare
+.\Cosmetic\gradlew.bat -p . devCheck
 .\Cosmetic\gradlew.bat -p . devRun
-# or, for an IDE remote Java debugger on localhost:5005
+# Or run with JDWP remote debugger on 127.0.0.1:5005:
 .\Cosmetic\gradlew.bat -p . devDebug
-```
+\`\`\`
 
-The Vanilla preparation tasks compile Java, package raw JARs, remap only the
-Vanilla variant, append the member metadata, and stage five artifacts under
-`build/dev-artifacts/`. These tasks are incremental within this workspace.
+- Launcher root: \`%APPDATA%/.lexplosion\`
+- Libraries: \`%APPDATA%/.lexplosion/libraries\`
+- Java: the launcher's \`java-runtime-gamma\`, or Gradle's JDK if not installed
+- NWClient JARs: \`workspace/build/dev-artifacts\` (staged by \`devPrepare\`)
 
-Before `devRun`, configure a **private, gitignored** `deploy.toml` with the
-correct `target`, `java_home`, and `[launch].command`. The launch command
-must reference the expected five staged JAR names in the classpath.
-`nwclient_dev.py` will fail instead of silently deploying stale artifacts
-if any filename is missing. It then copies only those five JARs to the
-configured development installation and starts Minecraft with its local profile.
+**No \`deploy.toml\` is required or read by \`devRun\`, \`devDebug\` or
+\`devCheck\`.** These tasks use the committed \`dev-launch-template.txt\` and
+the existing Minecraft 1.20 files already installed by the NWLauncher.
+The launch template was derived from the existing client launch profile,
+without an authlib-injector agent, account tokens, or remote authentication
+flags. It uses an **offline development identity only**, suitable for local
+UI tests, not authenticated multiplayer or NightWorld services.
 
-`devDebug` additionally opens the JDWP debugger on
-`127.0.0.1:5005`. Attach the IDE's Remote JVM Debugger there.
-The launcher command and any credentials are deliberately never printed or
-written to a generated .cmd file. **Do not reuse credentials committed in
-example files; use your own local development session.**
+The workspace loads the five staged NWClient JARs **directly**, so these
+default dev tasks do not overwrite the launcher's installed JARs. The launch
+profile still points to the existing \`nwclient dev\` Minecraft instance for
+assets, natives and \`client.jar\`. If that instance is not installed, run the
+NWLauncher once to create it, or add a separate template in a future task.
 
-The current remapping converter and member tool are Windows executables;
-`devPrepare` therefore requires Windows with their existing prerequisites
-installed. A successful in-game launch has not yet been verified.
+\`devCheck\` validates expected files and the classpath without launching.
+\`devDebug\` adds JDWP on \`127.0.0.1:5005\`; attach a Remote JVM Debugger in
+your IDE. JVM HotSwap and XML Live Reload are separate future tasks.
+
+For an **authenticated** profile, we will need a supported handoff from the
+NWLauncher to obtain an authorized *current session*. We do not extract,
+invent, or embed credentials in the repository. The historical
+\`deploy.toml\`/\`example.deploy.toml\` remain only for legacy/manual workflows;
+the default offline dev tasks ignore them.
+
+### Current validation status
+
+The Windows test confirmed \`devClasses\` and \`devPrepare\` built
+successfully. The new config-free offline game launch still needs an
+end-to-end local Windows test.
 
 ## Current scope
 
 - `devClasses`: incrementally compile both Cosmetic and MinecraftApi.Runtime (plus dependencies), without intentionally invoking packaging/remapping. All Java compile tasks use UTF-8 in this workspace.
 - `devBuild`: run the current module build tasks. These still include the
   child projects' Windows-only `postBuild` remapping, which is not optimized yet.
-- `devPrepare`, `devRun` and `devDebug` now exist as experimental tasks. The
+- `devPrepare`, `devCheck`, `devRun` and `devDebug` now exist as experimental tasks. The
   existing `build.py` and `deploy.py` remain available but are not invoked
   by these tasks. XML Live Reload is not implemented yet.
-- User testing identified Windows-1252 compiler errors and a missing Runtime scissor contract; the workspace now forces UTF-8 and pins a compatibility fix on `MinecraftApi.Runtime/experiment/unified-workspace-compat`. Verify with `devClasses --rerun-tasks`. The user has confirmed `devClasses --rerun-tasks` succeeded (10 tasks in 2s), but `devPrepare` and an actual Minecraft launch have not yet been verified.
+- User testing confirmed `devClasses --rerun-tasks` and `devPrepare` succeeded. A real offline Minecraft launch is not yet verified.
 
 Do not store Minecraft access tokens or expanded launch commands in committed
 configuration, CI logs, or shared scripts.

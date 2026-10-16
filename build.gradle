@@ -124,7 +124,7 @@ tasks.register('devPrepare', Sync) {
 def pythonExe = providers.gradleProperty('nwPython').orElse('python')
 tasks.register('devRun', Exec) {
     group = 'nwclient dev'
-    description = 'Prepare and run Minecraft with the LOCAL deploy.toml profile'
+    description = 'Run the offline dev profile using APPDATA/.lexplosion, no config file'
     dependsOn 'devPrepare'
     workingDir rootProject.projectDir
     executable pythonExe.get()
@@ -133,10 +133,20 @@ tasks.register('devRun', Exec) {
 }
 tasks.register('devDebug', Exec) {
     group = 'nwclient dev'
-    description = 'Prepare and run Minecraft with JDWP on localhost:5005'
+    description = 'Run the offline dev profile with JDWP on localhost:5005'
     dependsOn 'devPrepare'
     workingDir rootProject.projectDir
     executable pythonExe.get()
     args 'nwclient_dev.py','debug'
     environment 'NW_DEV_JAVA', new File(System.getProperty('java.home'),'bin/java.exe').absolutePath
+}
+
+tasks.register('devCheck', Exec) {
+    group = 'nwclient dev'
+    description = 'Validate the default offline dev profile without launching Minecraft'
+    dependsOn 'devPrepare'
+    workingDir rootProject.projectDir
+    executable pythonExe.get()
+    args 'nwclient_dev.py', 'check'
+    environment 'NW_DEV_JAVA', new File(System.getProperty('java.home'), 'bin/java.exe').absolutePath
 }

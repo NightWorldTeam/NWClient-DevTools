@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Launch NWClient using a local, uncommitted profile and staged Vanilla JARs.
+"""Run the default offline NWClient dev profile without any user config file.
 
-Never prints the launch command or writes secrets to a batch/shell script.
+The client loads the FIVE staged workspace JARs directly. Existing installed
+NWClient library JARs are never overwritten, and no login secrets are used.
 """
 import os
 import re
@@ -10,162 +11,146 @@ import subprocess
 import sys
 from pathlib import Path
 
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib
-
-ROOT = Path(__file__).resolve().parent
-STAGED = ROOT / "build" / "dev-artifacts"
-CONFIG = ROOT / "deploy.toml"
-DIRECTORIES = ("Cosmetics/1.0", "MinecraftApi/1.0", "MinecraftApi.Runtime/1.0",
-               "LaunchLinker/1.0", "ReflectionTools/1.0")
+WORKSPACE = Path(__file__).resolve().parent
+STAGED = WORKSPACE / "build" / "dev-artifacts"
+TEMPLATE = WORKSPACE / "dev-launch-template.txt"
+DEV_JARS = (
+    "Cosmetics/1.0",
+    "MinecraftApi/1.0",
+    "MinecraftApi.Runtime/1.0",
+    "LaunchLinker/1.0",
+    "ReflectionTools/1.0",
+)
 JDWP = "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:5005"
 
 
-def absolute(value):
-    result = Path(os.path.expanduser(os.path.expandvars(str(value))))
-    return (result if result.is_absolute() else ROOT / result).resolve()
-
-
-def java_path(config):
-    chosen = config.get("java_home") or os.environ.get("NW_DEV_JAVA") or os.environ.get("JAVA_HOME")
-    if chosen:
-        path = absolute(chosen)
+def java_executable(game_root):
+    candidates = [
+        game_root / "java" / "versions" / "java-runtime-gamma" / "bin" / "java.exe",
+    ]
+    for name in ("NW_DEV_JAVA", "JAVA_HOME"):
+        value = os.environ.get(name)
+        if not value:
+            continue
+        path = Path(value).expanduser()
         if path.is_dir():
             if path.name.lower() != "bin":
                 path /= "bin"
             path /= "java.exe"
-    else:
-        found = shutil.which("java.exe")
-        if not found:
-            raise ValueError("JDK 17 not found; configure java_home in deploy.toml.")
-        path = Path(found)
-    if not path.is_file():
-        raise ValueError(
-            "Configured Java executable is missing. The java_home value in "
-            "deploy.toml is resolved relative to the workspace. Remove the "
-            "java_home line to use the JDK supplied by Gradle, or specify an "
-            "absolute path to a valid Java 17 installation."
-        )
-    return path
+        candidates.append(path)
+    found = shutil.which("java.exe")
+    if found:
+        candidates.append(Path(found))
+    for path in candidates:
+        if path.is_file():
+            return path.resolve()
+    raise ValueError(
+        "Java was not found. Launch NWLauncher once to install Java, "
+        "or set JAVA_HOME to a Java 17 JDK."
+    )
 
 
-def run(debug=False):
+def validate_files():
     if os.name != "nt":
-        raise ValueError("This experimental Vanilla dev profile requires Windows.")
-    if not CONFIG.is_file():
-        raise ValueError("Create local deploy.toml from example.deploy.toml; do not commit secrets.")
-    with CONFIG.open("rb") as stream:
-        config = tomllib.load(stream)
-    launch = config.get("launch", {})
-    if not launch.get("command"):
-        raise ValueError(
-            "deploy.toml needs [launch].command from your local launcher profile. "
-            "Paths default to %APPDATA%/.lexplosion when not specified."
-        )
-
-    staged = []
-    for folder in DIRECTORIES:
-        files = list((STAGED / folder).glob("*.jar"))
-        if len(files) != 1:
-            raise ValueError(f"Expected exactly one JAR in build/dev-artifacts/{folder}.")
-        staged.append((files[0], Path(folder) / files[0].name))
-
-    command = launch["command"]
-    missing = [source.name for source, _ in staged if source.name not in command]
-    if missing:
-        raise ValueError("Launch classpath does not reference the staged dev JARs: "
-                         + ", ".join(missing))
-
-    # The NW launcher installs by default under %APPDATA%/.lexplosion.
-    # Local overrides still work for independent test installations.
-    if launch.get("root"):
-        game_root = absolute(launch["root"])
-    elif launch.get("libraries"):
-        game_root = absolute(launch["libraries"]).parent
-    else:
-        appdata = os.environ.get("APPDATA")
-        if not appdata:
+        raise ValueError("The existing NWClient Vanilla dev profile requires Windows.")
+    appdata = os.environ.get("APPDATA")
+    if not appdata:
+        raise ValueError("APPDATA is missing; this dev profile requires a Windows user session.")
+    game_root = Path(appdata).resolve() / ".lexplosion"
+    libraries = game_root / "libraries"
+    client_jar = game_root / "instances" / "nwclient dev" / "version" / "client.jar"
+    for description, path in (
+        ("launcher libraries", libraries),
+        ("launcher assets", game_root / "assets"),
+        ("launcher Minecraft client", client_jar),
+        ("default launch template", TEMPLATE),
+    ):
+        if not path.exists():
             raise ValueError(
-                "APPDATA is missing. Set [launch].root explicitly in deploy.toml."
+                f"Missing {description}: {path}. Install/start the NWLauncher "
+                "Minecraft 1.20 dev profile once before running the workspace."
             )
-        game_root = absolute(appdata) / ".lexplosion"
-    libraries = absolute(launch["libraries"]) if launch.get("libraries") else game_root / "libraries"
-    target = absolute(config["target"]) if config.get("target") else libraries / "org" / "nightworld"
+    staged = []
+    for directory in DEV_JARS:
+        files = sorted((STAGED / directory).glob("*.jar"))
+        if len(files) != 1:
+            raise ValueError(
+                f"Expected one staged JAR in build/dev-artifacts/{directory}, "
+                f"found {len(files)}. Run devPrepare first."
+            )
+        staged.append(files[0])
+    return game_root, libraries, staged
 
-    # A relative target from the sample config otherwise silently deploys to
-    # workspace/.lexplosion while the launch command loads the real installation.
-    expected_target = (libraries / "org" / "nightworld").resolve()
-    if os.path.normcase(str(target)) != os.path.normcase(str(expected_target)):
+
+def make_command(game_root, libraries, staged, debug):
+    template = "\n".join(
+        line.strip() for line in TEMPLATE.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
+    if (
+        "authlib-injector" in template
+        or "prefetched" in template
+        or "--clientId" in template
+        or "--xuid" in template
+        or "--accessToken 0" not in template
+    ):
+        raise ValueError("Unsafe local launch template: offline auth settings are invalid.")
+    absent = [file.name for file in staged if file.name not in template]
+    if absent:
         raise ValueError(
-            "deploy.toml target and [launch].libraries refer to different "
-            "installations. Set target to <libraries>/org/nightworld before "
-            "running devRun; no JARs have been copied."
-        )
-    if os.path.normcase(str(game_root)) != os.path.normcase(str(libraries.parent)):
-        raise ValueError(
-            "deploy.toml [launch].root and [launch].libraries refer to "
-            "different installations; no JARs have been copied."
+            "The default classpath needs an update to match built JARs: "
+            + ", ".join(absent)
         )
 
-    # Insert JDWP immediately after the Java executable, respecting quotes.
+    # The staged layout exactly mirrors the launcher's namespace directory.
+    # This avoids copying over any files of the user's launcher installation.
+    command = template
     if '"{java}"' not in command:
-        command = command.replace('{java}', '"{java}"', 1)
+        command = command.replace("{java}", '"{java}"', 1)
     if debug:
         command = command.replace('"{java}"', '"{java}" ' + JDWP, 1)
-    for name, value in {
-        "{java}": str(java_path(config)),
-        "{target}": str(target),
+    for placeholder, value in {
+        "{java}": str(java_executable(game_root)),
+        "{target}": str(STAGED),
         "{libraries}": str(libraries),
         "{root}": str(game_root),
         "{cpsep}": ";",
     }.items():
-        command = command.replace(name, value)
-    command = os.path.expandvars(command)
-    unresolved = re.findall(r"\$\{([A-Za-z_]\w*)\}|%([A-Za-z_]\w*)%", command)
-    if unresolved:
-        # Show only variable NAMES, never expanded credentials or the command.
-        names = ", ".join(sorted({left or right for left, right in unresolved}))
-        raise ValueError(
-            "Unresolved launcher environment variables: " + names
-            + ". Set them in the local environment or remove the optional "
-              "arguments that refer to them from deploy.toml. "
-              "Use fresh authentication data from your launcher."
-        )
-    if "{java}" in command or "{target}" in command or "{libraries}" in command:
-        raise ValueError("Launch profile contains an unresolved placeholder.")
+        command = command.replace(placeholder, value)
+    if re.search(r"\$\{[A-Za-z_]\w*\}|%[A-Za-z_]\w*%", command):
+        raise ValueError("Unexpected unexpanded variable in default dev template.")
+    if any(k in command for k in ("{java}", "{root}", "{target}", "{libraries}", "{cpsep}")):
+        raise ValueError("Unexpanded NWClient launch placeholder.")
+    return command
 
-    print(f"Deploying {len(staged)} NWClient dev artifacts to {target}")
-    for source, relative in staged:
-        destination = target / relative
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        temporary = destination.with_suffix(destination.suffix + ".nwclient-tmp")
-        try:
-            shutil.copy2(source, temporary)
-            os.replace(temporary, destination)
-        finally:
-            temporary.unlink(missing_ok=True)
-        print(f"  {relative}")
 
-    print("Starting Minecraft. Launch arguments and credentials are hidden.")
-    if debug:
-        print("Attach Java debugger to 127.0.0.1:5005")
+def main(mode):
+    game_root, libraries, staged = validate_files()
+    command = make_command(game_root, libraries, staged, mode == "debug")
+    if mode == "check":
+        print("NWClient offline-dev profile is ready.")
+        print("Installation:", game_root)
+        print("Runtime Java:", java_executable(game_root))
+        print("Java JARs:", len(staged), "loaded directly from workspace/build/dev-artifacts")
+        print("No launcher library JARs will be modified.")
+        return 0
+    print("Starting NWClient offline-dev profile (no account credentials).")
+    print("NWClient development JARs are loaded from the workspace; installation is unchanged.")
+    if mode == "debug":
+        print("Attach a remote Java debugger to 127.0.0.1:5005.")
     try:
-        # Direct Windows CreateProcessW avoids the 8191-char cmd.exe limit and
-        # never stores tokens in a generated .cmd or .sh file.
-        result = subprocess.run(command, shell=False, cwd=ROOT, check=False)
+        completed = subprocess.run(command, shell=False, cwd=WORKSPACE, check=False)
     except OSError as error:
-        raise ValueError(f"Java process could not start: {error.strerror}") from None
-    return result.returncode
+        raise ValueError(f"Minecraft could not start: {error.strerror}") from None
+    return completed.returncode
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2 or sys.argv[1] not in {"run", "debug"}:
-        print("Usage: nwclient_dev.py run|debug", file=sys.stderr)
+    if len(sys.argv) != 2 or sys.argv[1] not in ("run", "debug", "check"):
+        print("Usage: python nwclient_dev.py run|debug|check", file=sys.stderr)
         sys.exit(2)
     try:
-        sys.exit(run(debug=sys.argv[1] == "debug"))
-    except (ValueError, OSError) as error:
+        sys.exit(main(sys.argv[1]))
+    except ValueError as error:
         print(f"NWClient dev: {error}", file=sys.stderr)
         sys.exit(1)
