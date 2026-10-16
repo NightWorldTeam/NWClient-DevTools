@@ -27,7 +27,7 @@ def modules = [
     [label:'Runtime', module:project(':MinecraftApi.Runtime'), member:'nw_minecraft_api_runtime_members.json'],
     [label:'Cosmetics', module:project(':Cosmetics'), member:'nw_cosmetic_members.json']
 ]
-def outputs = [:]
+def vanillaVariants = [:]
 
 // Child module properties (gameVersion, version) and jar tasks are only
 // available after their build.gradle files have been evaluated. Keep this
@@ -84,6 +84,8 @@ modules.each { spec ->
             if (apiArchive != null) remapArgs.add(apiArchive.get().asFile.absolutePath)
             project.exec { commandLine remapArgs }
 
+            if (!vanillaJar.isFile())
+                throw new GradleException("Vanilla remapper did not create ${vanillaJar}")
             project.delete(membersDir)
             membersDir.mkdirs()
             project.exec {
@@ -97,18 +99,18 @@ modules.each { spec ->
             }
         }
     }
-    outputs[spec.label] = [task:remap, file:vanillaJar]
+    vanillaVariants[spec.label] = [task:remap, file:vanillaJar]
 }
 
 tasks.register('devPrepare', Sync) {
     group = 'nwclient dev'
     description = 'Build and stage exactly five Vanilla development JARs'
-    dependsOn(outputs.values().collect { it.task })
+    dependsOn(vanillaVariants.values().collect { it.task })
     dependsOn(':LaunchLinker:jar',':ReflectionTools:jar')
     into layout.buildDirectory.dir('dev-artifacts')
-    from(outputs.MinecraftApi.file) { into 'MinecraftApi/1.0' }
-    from(outputs.Runtime.file) { into 'MinecraftApi.Runtime/1.0' }
-    from(outputs.Cosmetics.file) { into 'Cosmetics/1.0' }
+    from(vanillaVariants.MinecraftApi.file) { into 'MinecraftApi/1.0' }
+    from(vanillaVariants.Runtime.file) { into 'MinecraftApi.Runtime/1.0' }
+    from(vanillaVariants.Cosmetics.file) { into 'Cosmetics/1.0' }
     from(project(':LaunchLinker').tasks.named('jar',Jar).flatMap { it.archiveFile }) {
         into 'LaunchLinker/1.0'
     }
