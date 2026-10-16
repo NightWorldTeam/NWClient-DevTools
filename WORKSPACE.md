@@ -175,6 +175,57 @@ The Windows test confirmed `devClasses` and `devPrepare` built
 successfully. The new config-free offline game launch still needs an
 end-to-end local Windows test.
 
+## Java HotSwap — IntelliJ IDEA Community 2025.2
+
+Minecraft already starts with Java 17 JDWP on `127.0.0.1:5005` when
+**NWClient - Minecraft Debug** is selected. The debugger can use the JVM's
+built-in HotSwap for *method-body changes*; no second Java agent is needed.
+
+**One-time local IntelliJ setup (user preferences, not shared project files):**
+
+1. Open **Settings → Build, Execution, Deployment → Debugger → HotSwap**.
+   Set **Reload classes after compilation** to **Always**, and enable
+   **Build project before reloading classes**.
+2. Under **Settings → Build, Execution, Deployment → Build Tools → Gradle**,
+   use **Gradle** in the **Build and run using** field for this workspace.
+3. Launch **NWClient - Minecraft Debug** with **Shift+F9**, and open
+   the Cosmetics GUI. The Java debugger must be attached.
+
+**Controlled test without Minecraft-mapped method references:**
+
+1. Open
+   `MinecraftApi/src/main/java/org/nightworld/minecraftapi/gui/components/TabControl.java`.
+2. In the **private computeTabWidth(TabItem tab)** method, change only
+   `return Math.max(MIN_TAB_WIDTH, textW + TAB_TEXT_PADDING);` to
+   `return Math.max(MIN_TAB_WIDTH, textW + TAB_TEXT_PADDING + 30);`.
+   Do not rename members or add fields.
+3. Use **Ctrl+F9 (Build Project)** or right-click the file and choose
+   **Compile and Reload Modified Files**. If prompted, apply HotSwap.
+4. The tab headers on the already-open Cosmetics screen should become
+   wider immediately. Confirm in the IntelliJ Debugger event output that
+   the modified class was actually reloaded.
+5. Revert the source edit and repeat the compile/reload to restore the
+   original width without restarting Minecraft.
+
+The JVM does not support adding or deleting fields/methods or changing their
+signatures using standard HotSwap; restart F5 after such changes.
+
+**Important: this is an initial test, not yet a verified general-purpose
+HotSwap implementation.** Our running Minecraft loads **Vanilla-remapped**
+JAR files, whereas IntelliJ may offer *unremapped* `build/classes/java/main`
+bytecode. A Java body that calls Minecraft classes or members whose names
+change during remapping may be incompatible when redefined directly by the
+IDE. The test above deliberately modifies only UI-library arithmetic.
+Do not assume that all Cosmetics or MinecraftApi.Runtime classes are safe
+to HotSwap until the compatibility test succeeds. If a reload fails or
+the game reports `NoSuchMethodError`/`NoClassDefFoundError`, restart the
+debug session, which rebuilds the remapped JARs using `devPrepare`.
+A remap-aware HotSwap pipeline would be a separate follow-up.
+
+Source: JetBrains IDEA's built-in **Reload modified classes** documentation.
+The settings in this section are local to each IntelliJ installation; Git
+cannot change those user preferences through the shared `.run` files.
+
 ## XML / XAML Hot Reload (experimental)
 
 The workspace pins the experimental `MinecraftApi` branch
