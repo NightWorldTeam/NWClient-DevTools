@@ -50,26 +50,125 @@ def java_executable(game_root):
     )
 
 
+def path_from_setting(value):
+    """Resolve an explicit Windows path or a relative path from the workspace."""
+    expanded = os.path.expandvars(os.path.expanduser(str(value).strip().strip('"')))
+    path = Path(expanded)
+    return (path if path.is_absolute() else WORKSPACE / path).resolve()
+
+
+def missing_installation_files(game_root):
+    """A directory alone is not a usable Minecraft installation."""
+    required = {
+        "libraries": game_root / "libraries",
+        "assets": game_root / "assets",
+        "Minecraft 1.20 client.jar":
+            game_root / "instances" / "nwclient dev" / "version" / "client.jar",
+    }
+    return [label for label, location in required.items() if not location.exists()]
+
+
+def read_deploy_root():
+    """Use deploy.toml ONLY for installation paths, never session credentials."""
+    config_file = WORKSPACE / "deploy.toml"
+    if not config_file.is_file():
+        raise ValueError(
+            "No usable NWLauncher installation found via NWCLIENT_HOME or "
+            "%APPDATA%/.lexplosion. Create deploy.toml in the workspace and "
+            "set [launch].root to your game files directory "
+            "(or provide [launch].libraries / target)."
+        )
+    try:
+        try:
+            import tomllib
+        except ModuleNotFoundError:
+            import tomli as tomllib
+        with config_file.open("rb") as stream:
+            config = tomllib.load(stream)
+    except (OSError, ValueError) as error:
+        raise ValueError(
+            "deploy.toml could not be read. Check its TOML syntax and paths."
+        ) from None
+    launch = config.get("launch", {})
+    if not isinstance(launch, dict):
+        raise ValueError("deploy.toml [launch] must be a TOML table.")
+
+    raw_root = launch.get("root") or config.get("root")
+    raw_libraries = launch.get("libraries") or config.get("libraries")
+    raw_target = config.get("target")
+    libraries = path_from_setting(raw_libraries) if raw_libraries else None
+    target = path_from_setting(raw_target) if raw_target else None
+
+    if raw_root:
+        game_root = path_from_setting(raw_root)
+    elif libraries:
+        game_root = libraries.parent
+    elif target:
+        if [part.lower() for part in target.parts[-3:]] != [
+            "libraries", "org", "nightworld"
+        ]:
+            raise ValueError(
+                "deploy.toml target must end with libraries/org/nightworld "
+                "if [launch].root and [launch].libraries are omitted."
+            )
+        game_root = target.parents[2]
+    else:
+        raise ValueError(
+            "deploy.toml exists but no installation path is configured. "
+            "Set [launch].root (recommended), [launch].libraries, or target."
+        )
+
+    if libraries and os.path.normcase(str(libraries)) != os.path.normcase(
+        str(game_root / "libraries")
+    ):
+        raise ValueError(
+            "deploy.toml [launch].root and [launch].libraries point to "
+            "different installations."
+        )
+    if target and os.path.normcase(str(target)) != os.path.normcase(
+        str(game_root / "libraries" / "org" / "nightworld")
+    ):
+        raise ValueError(
+            "deploy.toml target must equal <root>/libraries/org/nightworld."
+        )
+    return game_root
+
+
+def locate_installation():
+    """Priority: NWCLIENT_HOME > %APPDATA%/.lexplosion > deploy.toml."""
+    custom = os.environ.get("NWCLIENT_HOME")
+    if custom and custom.strip():
+        root = path_from_setting(custom)
+        if not missing_installation_files(root):
+            return root, "NWCLIENT_HOME"
+        print("NWCLIENT_HOME does not contain a complete NWClient dev profile; trying defaults.")
+
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        root = path_from_setting(appdata) / ".lexplosion"
+        if not missing_installation_files(root):
+            return root, "%APPDATA%/.lexplosion"
+
+    root = read_deploy_root()
+    missing = missing_installation_files(root)
+    if missing:
+        raise ValueError(
+            "deploy.toml installation is incomplete (missing: "
+            + ", ".join(missing)
+            + "). Set [launch].root to an existing Minecraft 1.20 "
+              "NWLauncher profile, or use NWCLIENT_HOME."
+        )
+    return root, "deploy.toml"
+
+
 def validate_files():
     if os.name != "nt":
         raise ValueError("The existing NWClient Vanilla dev profile requires Windows.")
-    appdata = os.environ.get("APPDATA")
-    if not appdata:
-        raise ValueError("APPDATA is missing; this dev profile requires a Windows user session.")
-    game_root = Path(appdata).resolve() / ".lexplosion"
+    game_root, source = locate_installation()
     libraries = game_root / "libraries"
-    client_jar = game_root / "instances" / "nwclient dev" / "version" / "client.jar"
-    for description, path in (
-        ("launcher libraries", libraries),
-        ("launcher assets", game_root / "assets"),
-        ("launcher Minecraft client", client_jar),
-        ("default launch template", TEMPLATE),
-    ):
-        if not path.exists():
-            raise ValueError(
-                f"Missing {description}: {path}. Install/start the NWLauncher "
-                "Minecraft 1.20 dev profile once before running the workspace."
-            )
+    if not TEMPLATE.is_file():
+        raise ValueError("Default dev-launch-template.txt is missing.")
+
     staged = []
     for directory in DEV_JARS:
         files = sorted((STAGED / directory).glob("*.jar"))
@@ -79,7 +178,7 @@ def validate_files():
                 f"found {len(files)}. Run devPrepare first."
             )
         staged.append(files[0])
-    return game_root, libraries, staged
+    return game_root, libraries, staged, source
 
 
 def make_command(game_root, libraries, staged, debug):
@@ -125,11 +224,11 @@ def make_command(game_root, libraries, staged, debug):
 
 
 def main(mode):
-    game_root, libraries, staged = validate_files()
+    game_root, libraries, staged, source = validate_files()
     command = make_command(game_root, libraries, staged, mode == "debug")
     if mode == "check":
         print("NWClient offline-dev profile is ready.")
-        print("Installation:", game_root)
+        print("Installation:", game_root, "(from", source + ")")
         print("Runtime Java:", java_executable(game_root))
         print("Java JARs:", len(staged), "loaded directly from workspace/build/dev-artifacts")
         print("No launcher library JARs will be modified.")
