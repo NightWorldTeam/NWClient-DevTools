@@ -175,6 +175,36 @@ The Windows test confirmed `devClasses` and `devPrepare` built
 successfully. The new config-free offline game launch still needs an
 end-to-end local Windows test.
 
+## XML / XAML Hot Reload (experimental)
+
+The workspace pins the experimental `MinecraftApi` branch
+`experiment/unified-workspace-hot-reload`. The launch tasks `devRun` and
+`devDebugStart` pass the **workspace root** using the JVM property
+`nwclient.xaml.dir`. MinecraftApi.XamlView then reads edited XAML source files
+from `Cosmetic/src/main/resources/assets/nightworld/cosmetic/ui/` without
+restaging JARs.
+
+1. `git pull`, `git submodule update --init --recursive`, and reload Gradle
+   in IntelliJ.
+2. Start **NWClient - Minecraft Debug** using Shift+F9 and open an existing
+   XAML-backed Cosmetics screen.
+3. Edit and save `Cosmetic/src/main/resources/assets/nightworld/cosmetic/ui/cosmetic_settings.xml`.
+4. While that screen is open, it checks for saved changes approximately every
+   350 ms and replaces its UI element tree automatically.
+
+If XML parsing fails, the old UI remains visible; the error is written to the
+Minecraft log. Saving a corrected file triggers another attempt. Reloading
+recreates widget instances and clears keyboard focus, so temporary UI state
+(including selected tabs and text input) is reset.
+
+The feature watches files only when the JVM option is set. Production builds
+and the normal installed launcher do not gain file polling. The JAR packaged
+resource remains the fallback if an XML source file is unavailable.
+
+**Not yet tested in a full Windows Minecraft session.** This is an
+experimental source-watching implementation, not Java class HotSwap or a
+general external filesystem watcher.
+
 ## Current scope
 
 - `devClasses`: incrementally compile both Cosmetic and MinecraftApi.Runtime (plus dependencies), without intentionally invoking packaging/remapping. All Java compile tasks use UTF-8 in this workspace.

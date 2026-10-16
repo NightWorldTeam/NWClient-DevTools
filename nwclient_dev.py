@@ -227,6 +227,12 @@ def make_command(game_root, libraries, staged, debug):
         command = command.replace("{java}", '"{java}"', 1)
     if debug:
         command = command.replace('"{java}"', '"{java}" ' + JDWP, 1)
+    # Enable live XAML source overrides only for this development workspace.
+    # The JVM property is consumed by MinecraftApi.XamlView on the game thread.
+    xaml_option = '-Dnwclient.xaml.dir="' + str(WORKSPACE) + '"'
+    if ' -cp "' not in command:
+        raise ValueError("Cannot locate JVM classpath in dev launch template.")
+    command = command.replace(' -cp "', ' ' + xaml_option + ' -cp "', 1)
     for placeholder, value in {
         "{java}": str(java_executable(game_root)),
         "{target}": str(STAGED),
