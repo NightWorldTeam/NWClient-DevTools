@@ -44,50 +44,55 @@ git commit -m "chore: update NWClient submodule pins"
 
 ## Installation discovery
 
-The default offline dev launcher searches for a complete NWLauncher
-installation in this exact order:
+The default offline dev launcher resolves the NWLauncher game-data directory
+with this **exact precedence**:
 
-1. `NWCLIENT_HOME` — developer's custom game-data directory, if valid
-2. `%APPDATA%/.lexplosion` — the standard NWLauncher game-data directory
-3. `deploy.toml` — only if neither of the first two contains the required
-   `libraries`, `assets`, and `instances/nwclient dev/version/client.jar`
+1. **`deploy.toml`**, if it exists in the workspace: use its explicitly
+   configured installation directory. It is authoritative regardless of whether
+   `NWCLIENT_HOME` or the standard APPDATA installation exists.
+2. **`NWCLIENT_HOME`**, if set and the installation is complete.
+3. **`%APPDATA%/.lexplosion`**, the normal NWLauncher game-data directory,
+   if the installation is complete.
 
-An invalid candidate is skipped. If the fallback is needed but no
-`deploy.toml` exists, `devRun`/`devCheck` stops with a helpful error.
+If `deploy.toml` exists but contains an invalid directory, the launch fails
+with a descriptive error; it will **not silently fall back** to some other
+installation. If no valid automatic installation exists and `deploy.toml`
+is absent, the tool instructs the developer to create it.
 
-The minimum private fallback configuration is:
+The minimal private override is:
 
 ```toml
 [launch]
 root = "D:/Games/NightWorld"
 ```
 
-Instead of `[launch].root`, the fallback also supports
-`[launch].libraries` or top-level `target` (pointing to
-`libraries/org/nightworld`). These fields must describe the same installation.
-The launch command, account token and Java path are **not** read from
-`deploy.toml` by the offline development tasks.
+The config also supports `[launch].libraries` or top-level `target`
+(pointing to `libraries/org/nightworld`), provided that all specified
+paths refer to the same installation. The offline dev tasks read only
+installation paths from `deploy.toml`; they ignore any stored launcher
+command, Java setting, or authentication tokens.
 
 ## Plug-and-play Windows development
 
-The default tasks are intentionally **configuration-free**:
+With no override file, the default tasks are **configuration-free**:
 
-\`\`\`powershell
+```powershell
 git pull
 git submodule update --init --recursive
 .\Cosmetic\gradlew.bat -p . devCheck
 .\Cosmetic\gradlew.bat -p . devRun
 # Or run with JDWP remote debugger on 127.0.0.1:5005:
 .\Cosmetic\gradlew.bat -p . devDebug
-\`\`\`
+```
 
-- Launcher root: \`%APPDATA%/.lexplosion\`
-- Libraries: \`%APPDATA%/.lexplosion/libraries\`
-- Java: the launcher's \`java-runtime-gamma\`, or Gradle's JDK if not installed
-- NWClient JARs: \`workspace/build/dev-artifacts\` (staged by \`devPrepare\`)
+- Launcher root: `%APPDATA%/.lexplosion`
+- Libraries: `%APPDATA%/.lexplosion/libraries`
+- Java: the launcher's `java-runtime-gamma`, or Gradle's JDK if not installed
+- NWClient JARs: `workspace/build/dev-artifacts` (staged by `devPrepare`)
 
-**No \`deploy.toml\` is required or read by \`devRun\`, \`devDebug\` or
-\`devCheck\`.** These tasks use the committed \`dev-launch-template.txt\` and
+**`deploy.toml` is optional.** If it exists, its installation paths override
+all automatic discovery for `devRun`, `devDebug`, and `devCheck`.
+These tasks use the committed `dev-launch-template.txt` and
 the existing Minecraft 1.20 files already installed by the NWLauncher.
 The launch template was derived from the existing client launch profile,
 without an authlib-injector agent, account tokens, or remote authentication
@@ -96,23 +101,23 @@ UI tests, not authenticated multiplayer or NightWorld services.
 
 The workspace loads the five staged NWClient JARs **directly**, so these
 default dev tasks do not overwrite the launcher's installed JARs. The launch
-profile still points to the existing \`nwclient dev\` Minecraft instance for
-assets, natives and \`client.jar\`. If that instance is not installed, run the
+profile still points to the existing `nwclient dev` Minecraft instance for
+assets, natives and `client.jar`. If that instance is not installed, run the
 NWLauncher once to create it, or add a separate template in a future task.
 
-\`devCheck\` validates expected files and the classpath without launching.
-\`devDebug\` adds JDWP on \`127.0.0.1:5005\`; attach a Remote JVM Debugger in
+`devCheck` validates expected files and the classpath without launching.
+`devDebug` adds JDWP on `127.0.0.1:5005`; attach a Remote JVM Debugger in
 your IDE. JVM HotSwap and XML Live Reload are separate future tasks.
 
 For an **authenticated** profile, we will need a supported handoff from the
 NWLauncher to obtain an authorized *current session*. We do not extract,
 invent, or embed credentials in the repository. The historical
-\`deploy.toml\`/\`example.deploy.toml\` remain only for legacy/manual workflows;
-the default offline dev tasks ignore them.
+`deploy.toml`/`example.deploy.toml` remain only for legacy/manual workflows;
+the default offline dev tasks use only their installation path fields.
 
 ### Current validation status
 
-The Windows test confirmed \`devClasses\` and \`devPrepare\` built
+The Windows test confirmed `devClasses` and `devPrepare` built
 successfully. The new config-free offline game launch still needs an
 end-to-end local Windows test.
 

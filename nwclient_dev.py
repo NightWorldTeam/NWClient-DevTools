@@ -135,13 +135,30 @@ def read_deploy_root():
 
 
 def locate_installation():
-    """Priority: NWCLIENT_HOME > %APPDATA%/.lexplosion > deploy.toml."""
+    """Priority: deploy.toml (authoritative) > NWCLIENT_HOME > APPDATA."""
+    config_file = WORKSPACE / "deploy.toml"
+
+    # An explicit local config always wins. If invalid, stop rather than
+    # silently running another Minecraft installation or ignoring mistakes.
+    if config_file.exists():
+        if not config_file.is_file():
+            raise ValueError("deploy.toml exists but is not a readable file.")
+        root = read_deploy_root()
+        missing = missing_installation_files(root)
+        if missing:
+            raise ValueError(
+                "deploy.toml takes priority, but its installation is incomplete "
+                "(missing: " + ", ".join(missing)
+                + "). Fix deploy.toml or remove it to enable autodetection."
+            )
+        return root, "deploy.toml"
+
     custom = os.environ.get("NWCLIENT_HOME")
     if custom and custom.strip():
         root = path_from_setting(custom)
         if not missing_installation_files(root):
             return root, "NWCLIENT_HOME"
-        print("NWCLIENT_HOME does not contain a complete NWClient dev profile; trying defaults.")
+        print("NWCLIENT_HOME does not contain a complete NWClient dev profile; trying APPDATA.")
 
     appdata = os.environ.get("APPDATA")
     if appdata:
@@ -149,16 +166,11 @@ def locate_installation():
         if not missing_installation_files(root):
             return root, "%APPDATA%/.lexplosion"
 
-    root = read_deploy_root()
-    missing = missing_installation_files(root)
-    if missing:
-        raise ValueError(
-            "deploy.toml installation is incomplete (missing: "
-            + ", ".join(missing)
-            + "). Set [launch].root to an existing Minecraft 1.20 "
-              "NWLauncher profile, or use NWCLIENT_HOME."
-        )
-    return root, "deploy.toml"
+    raise ValueError(
+        "No usable NWLauncher installation found in NWCLIENT_HOME or "
+        "%APPDATA%/.lexplosion. Create deploy.toml and set [launch].root "
+        "to the directory containing libraries, assets, and instances."
+    )
 
 
 def validate_files():
