@@ -28,7 +28,7 @@ It will be checked out together with the rest of the workspace.
 | Directory | Branch for explicit updates | Pinned commit |
 | --- | --- | --- |
 | Cosmetic | new-architecture | 16418d77cbf9c3bb75321720abb747a950ece50c |
-| MinecraftApi | new-architecture | cb094de3532c636f542e93743908d10fcd9bc98e |
+| MinecraftApi | experiment/unified-workspace-hot-reload | ffe626789382154f187fdc785e14f6f3340828e4 |
 | MinecraftApi.Runtime | experiment/unified-workspace-compat | 1b9acde093164cc8b8ec12c1faf76f2557492dd3 |
 | LaunchLinker | new-architecture | 3fbb477c08a37140986b3212646784e5db929341 |
 | ReflectionTools | main | 9c2fa0ab48c3aacea24b352289d1269b2aaa8958 |
