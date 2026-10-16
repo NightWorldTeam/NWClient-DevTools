@@ -4,24 +4,100 @@ This is the **multi-repository Gradle development workspace** on the
 `new-architecture` branch. The five Java repositories remain
 independent Git repositories; this repo pins them as **real Git submodules**.
 
-## Get started
+## Fresh Windows checkout and IntelliJ setup
+
+Requires **Git** (with access to the NightWorldTeam submodules), **JDK 17**,
+**Python 3.11+** on PATH, and an installed NWLauncher **Minecraft 1.20 Dev**
+instance (normally at `%APPDATA%\\.lexplosion`).
+
+Open PowerShell in the folder where you keep projects. Clone the ROOT
+workspace repository, rather than cloning `Cosmetic` on its own:
 
 ```powershell
-git clone --branch new-architecture --recurse-submodules https://github.com/NightWorldTeam/NWClient-DevTools.git NWClient-Workspace-Test
-cd NWClient-Workspace-Test
+git clone --branch new-architecture --recurse-submodules https://github.com/NightWorldTeam/NWClient-DevTools.git NWClient-Workspace
+cd .\NWClient-Workspace
+git submodule update --init --recursive
+git branch --show-current
 ```
 
-The project's existing Gradle 8.10 wrapper is inside `Cosmetic`. Gradle finds
-the root `settings.gradle` when launched from the workspace directory:
+The last command should print `new-architecture`. The root must contain
+`settings.gradle`, `build.gradle`, `.run/`, `Cosmetic/`, `MinecraftApi/`,
+`MinecraftApi.Runtime/`, `LaunchLinker/` and `ReflectionTools/`.
+
+The Gradle 8.10 wrapper is stored inside `Cosmetic`. **From the workspace root**
+use `-p .` to select the correct root Gradle project:
 
 ```powershell
 .\Cosmetic\gradlew.bat -p . projects
 .\Cosmetic\gradlew.bat -p . devClasses
-.\Cosmetic\gradlew.bat -p . devBuild
+.\Cosmetic\gradlew.bat -p . devCheck
 ```
 
-`ReflectionTools` is included as a pinned Git submodule on its `main` branch.
-It will be checked out together with the rest of the workspace.
+`projects` should list `:Cosmetics`, `:MinecraftApi`,
+`:MinecraftApi.Runtime`, `:LaunchLinker` and `:ReflectionTools`.
+`devCheck` runs `devPrepare` and validates the installed launcher files.
+The first run may download Gradle dependencies and generate mappings.
+
+In **IntelliJ IDEA Community 2025.2.x**:
+1. **File → Open** → select the *folder* `NWClient-Workspace`, not a
+   `.gradle` file and not the individual `Cosmetic` submodule.
+2. Import/link the **root Gradle project**. Its **build script** is
+   `build.gradle`; `settings.gradle` must NOT be selected as the build file.
+3. **Settings → Build, Execution, Deployment → Build Tools → Gradle**:
+   choose **Gradle JVM: JDK 17**. Reload all Gradle projects.
+4. Select **NWClient - Minecraft Debug** (shared configuration from `.run/`)
+   and press **Shift+F9**. The launcher starts Minecraft and attaches the
+   debugger on `127.0.0.1:5005`.
+5. **Ctrl+F9** compiles/reloads method-body changes while the debugger is
+   attached. Saving an XML file under
+   `Cosmetic/src/main/resources/assets/nightworld/cosmetic/ui/` hot-reloads
+   the currently open Cosmetics screen. Standard JVM HotSwap cannot redefine
+   class structure, and bytecode referencing remapped Minecraft symbols may
+   not be compatible.
+
+You can bind **F5** to the IntelliJ **Debug** action in
+**Settings → Keymap** if desired. This is a *local IDE preference*.
+
+### Fix: `settings.gradle` line 1 reports read-only `name`
+
+If Gradle says:
+
+```text
+Build file '...\\settings.gradle' line: 1
+Cannot set the value of read-only property 'name' for root project
+```
+
+IntelliJ (or a custom Gradle command) is very likely treating
+`settings.gradle` **as the build script**. The line
+`rootProject.name = 'NWClientWorkspace'` is **valid in a settings script**;
+do not modify it to silence the error.
+
+1. **Confirm outside IntelliJ** from the workspace root:
+
+   ```powershell
+   .\Cosmetic\gradlew.bat -p . projects
+   ```
+
+   If this works, the repository is fine and the old IntelliJ Gradle import
+   is the likely cause.
+
+2. In IntelliJ's **Gradle tool window**, **Unlink Gradle Project** for
+   the incorrect `settings.gradle` link. Reopen the workspace *directory*
+   using **File → Open** and link its root `build.gradle`.
+3. If that does not clear the saved link, close IntelliJ, then back up
+   its local project configuration **only if `.idea` exists**:
+
+   ```powershell
+   Rename-Item .idea .idea.before-reimport
+   ```
+
+   Reopen the workspace folder and reimport Gradle. The tracked `.run/`
+   debug configurations remain intact.
+4. Ensure no Gradle command or run configuration passes
+   `-b settings.gradle` or `--build-file settings.gradle`.
+
+If the PowerShell `projects` task also fails, investigate its full console
+output; a different Gradle issue may be involved.
 
 ## Repository pins
 
@@ -29,7 +105,7 @@ It will be checked out together with the rest of the workspace.
 | --- | --- | --- |
 | Cosmetic | new-architecture | 16418d77cbf9c3bb75321720abb747a950ece50c |
 | MinecraftApi | new-architecture | ffe626789382154f187fdc785e14f6f3340828e4 |
-| MinecraftApi.Runtime | new-architecture-compat | 1b9acde093164cc8b8ec12c1faf76f2557492dd3 |
+| MinecraftApi.Runtime | experiment/unified-workspace-compat | 1b9acde093164cc8b8ec12c1faf76f2557492dd3 |
 | LaunchLinker | new-architecture | 3fbb477c08a37140986b3212646784e5db929341 |
 | ReflectionTools | main | 9c2fa0ab48c3aacea24b352289d1269b2aaa8958 |
 
@@ -124,7 +200,7 @@ button on a Gradle task by itself debugs the Gradle process, not Minecraft;
 use the provided **Remote JVM Debug** configuration.
 
 The IntelliJ configuration files have static XML tests, but
-an actual full IntelliJ Debug → Minecraft session, including breakpoints, was confirmed on Windows.
+an actual IntelliJ Debug → Minecraft session with working breakpoints was confirmed on Windows.
 
 ## Plug-and-play Windows development
 
@@ -161,7 +237,7 @@ NWLauncher once to create it, or add a separate template in a future task.
 
 `devCheck` validates expected files and the classpath without launching.
 `devDebug` adds JDWP on `127.0.0.1:5005`; attach a Remote JVM Debugger in
-your IDE. JVM HotSwap and XML Live Reload are separate future tasks.
+your IDE. JVM HotSwap of compatible method bodies and XAML Hot Reload are available in the development profile.
 
 For an **authenticated** profile, we will need a supported handoff from the
 NWLauncher to obtain an authorized *current session*. We do not extract,
@@ -250,8 +326,7 @@ The feature watches files only when the JVM option is set. Production builds
 and the normal installed launcher do not gain file polling. The JAR packaged
 resource remains the fallback if an XML source file is unavailable.
 
-**Verified in a Windows Minecraft session.** This is an
-experimental source-watching implementation, not Java class HotSwap or a
+**Verified in a Windows Minecraft session.** This is an experimental source-watching implementation, not a
 general external filesystem watcher.
 
 ## Current scope

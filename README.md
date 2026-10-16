@@ -1,9 +1,21 @@
 # NWClient Development Workspace
 
-The current IntelliJ IDEA Community 2025.2 development workflow lives on
-the **`new-architecture`** branch. See [WORKSPACE.md](WORKSPACE.md) for
-setup, Gradle tasks, debugger configuration, XML Hot Reload, Java HotSwap,
-submodule versions, and installation detection.
+**Active development branch: `new-architecture`.** Setup for IntelliJ IDEA
+Community 2025.2.x on Windows: see [WORKSPACE.md](WORKSPACE.md).
+
+Fresh clone and Gradle validation (PowerShell, JDK 17):
+
+```powershell
+git clone --branch new-architecture --recurse-submodules https://github.com/NightWorldTeam/NWClient-DevTools.git NWClient-Workspace
+cd .\NWClient-Workspace
+.\Cosmetic\gradlew.bat -p . projects
+.\Cosmetic\gradlew.bat -p . devCheck
+```
+
+**Important:** Open the *workspace folder* in IntelliJ, not `settings.gradle`
+as a Gradle build script. The latter causes a misleading
+`rootProject.name` read-only error. See the troubleshooting steps in
+[WORKSPACE.md](WORKSPACE.md).
 
 Confirmed on Windows: Minecraft debugger connection, Java breakpoints,
 `devClasses`, `devPrepare`, `devCheck`, XML UI Hot Reload, and standard
