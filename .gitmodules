@@ -14,3 +14,7 @@
 	path = LaunchLinker
 	url = https://github.com/NightWorldTeam/LaunchLinker.git
 	branch = new-architecture
+[submodule "ReflectionTools"]
+	path = ReflectionTools
+	url = https://github.com/NightWorldTeam/ReflectionTools.git
+	branch = main
