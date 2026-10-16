@@ -2,6 +2,7 @@
 # Generated build files in the workspace root (child Git submodules own theirs).
 /.gradle/
 /build/
+/logs/
 /out/
 /target/
 /.kotlin/
