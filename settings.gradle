@@ -1,0 +1,28 @@
+rootProject.name = 'NWClientWorkspace'
+
+def modules = [
+    'LaunchLinker'        : 'LaunchLinker',
+    'MinecraftApi'       : 'MinecraftApi',
+    'MinecraftApi.Runtime': 'MinecraftApi.Runtime',
+    'Cosmetics'           : 'Cosmetic',
+]
+
+modules.each { name, directory ->
+    def moduleDirectory = file(directory)
+    if (!new File(moduleDirectory, 'build.gradle').isFile()) {
+        throw new GradleException("Missing module ${directory}. Run: git submodule update --init --recursive")
+    }
+    include(":${name}")
+    project(":${name}").projectDir = moduleDirectory
+}
+
+// ReflectionTools is a separate dependency used by existing build.gradle files.
+// It is not accessible through this workspace's GitHub integration, so we do not
+// invent a submodule commit. Clone it into this directory to enable dev builds.
+def reflectionTools = file('ReflectionTools')
+if (new File(reflectionTools, 'build.gradle').isFile()) {
+    include(':ReflectionTools')
+    project(':ReflectionTools').projectDir = reflectionTools
+} else {
+    logger.warn('ReflectionTools checkout not found. The existing Java project dependencies may require it.')
+}

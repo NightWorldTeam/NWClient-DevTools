@@ -1,0 +1,16 @@
+[submodule "Cosmetic"]
+	path = Cosmetic
+	url = https://github.com/NightWorldTeam/Cosmetic.git
+	branch = new-architecture
+[submodule "MinecraftApi"]
+	path = MinecraftApi
+	url = https://github.com/NightWorldTeam/MinecraftApi.git
+	branch = new-architecture
+[submodule "MinecraftApi.Runtime"]
+	path = MinecraftApi.Runtime
+	url = https://github.com/NightWorldTeam/MinecraftApi.Runtime.git
+	branch = main
+[submodule "LaunchLinker"]
+	path = LaunchLinker
+	url = https://github.com/NightWorldTeam/LaunchLinker.git
+	branch = new-architecture

@@ -1,0 +1,24 @@
+plugins {
+    id 'base'
+}
+
+description = 'Experimental NWClient multi-project developer workspace'
+
+// This target intentionally does not remap or package artifacts.
+// It allows incremental compilation of Cosmetic and its project dependencies.
+tasks.register('devClasses') {
+    group = 'nwclient dev'
+    description = 'Incrementally compile Cosmetics and its required project dependencies'
+    dependsOn(':Cosmetics:classes')
+}
+
+// Full existing project build path. Current child builds also run their
+// postBuild tasks (including remapping) on Windows; optimization is separate.
+tasks.register('devBuild') {
+    group = 'nwclient dev'
+    description = 'Build NWClient projects using their existing Gradle tasks'
+    dependsOn(':LaunchLinker:build', ':MinecraftApi:build', ':MinecraftApi.Runtime:build', ':Cosmetics:build')
+}
+
+// Deployment/launch remain in build.py for now, pending a verified launch
+// profile and safe credential handling.
