@@ -113,10 +113,17 @@ def read_deploy_root():
             )
         game_root = target.parents[2]
     else:
-        raise ValueError(
-            "deploy.toml exists but no installation path is configured. "
-            "Set [launch].root (recommended), [launch].libraries, or target."
-        )
+        # A deploy.toml file can contain deployment rules, launch flags or
+        # other settings without specifying an installation directory.
+        # It still takes precedence; unspecified paths use the normal
+        # NWLauncher installation instead of failing on missing keys.
+        appdata = os.environ.get("APPDATA")
+        if not appdata:
+            raise ValueError(
+                "deploy.toml has no installation path and APPDATA is not set. "
+                "Set [launch].root, [launch].libraries, or target."
+            )
+        game_root = path_from_setting(appdata) / ".lexplosion"
 
     if libraries and os.path.normcase(str(libraries)) != os.path.normcase(
         str(game_root / "libraries")

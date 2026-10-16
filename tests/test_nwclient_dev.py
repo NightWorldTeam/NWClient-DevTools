@@ -76,11 +76,37 @@ class InstallationDiscoveryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Create deploy.toml"):
             self.discover()
 
-    def test_empty_explicit_config_is_error_even_if_appdata_valid(self):
+    def test_empty_explicit_config_uses_appdata_defaults(self):
         self.install(self.appdata / ".lexplosion")
+        self.install(self.custom)
         (self.workspace / "deploy.toml").write_text("[launch]\n", encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, "no installation path"):
+        root, source = self.discover(NWCLIENT_HOME=str(self.custom))
+        self.assertEqual(root, self.appdata / ".lexplosion")
+        self.assertEqual(source, "deploy.toml")
+
+    def test_config_with_unrelated_fields_uses_appdata_defaults(self):
+        self.install(self.appdata / ".lexplosion")
+        (self.workspace / "deploy.toml").write_text(
+            '[projects.Cosmetic]\n"build/libs/*.jar" = "Cosmetics/1.0/"\n',
+            encoding="utf-8"
+        )
+        root, source = self.discover()
+        self.assertEqual(root, self.appdata / ".lexplosion")
+        self.assertEqual(source, "deploy.toml")
+
+    def test_invalid_toml_is_not_ignored(self):
+        self.install(self.appdata / ".lexplosion")
+        (self.workspace / "deploy.toml").write_text("[launch\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "could not be read"):
             self.discover()
+
+    def test_empty_config_without_appdata_requires_explicit_root(self):
+        (self.workspace / "deploy.toml").write_text("[launch]\n", encoding="utf-8")
+        with mock.patch.object(dev, "WORKSPACE", self.workspace), mock.patch.dict(
+            os.environ, {}, clear=True
+        ):
+            with self.assertRaisesRegex(ValueError, "APPDATA is not set"):
+                dev.locate_installation()
 
 
 if __name__ == "__main__":

@@ -47,17 +47,23 @@ git commit -m "chore: update NWClient submodule pins"
 The default offline dev launcher resolves the NWLauncher game-data directory
 with this **exact precedence**:
 
-1. **`deploy.toml`**, if it exists in the workspace: use its explicitly
-   configured installation directory. It is authoritative regardless of whether
+1. **`deploy.toml`**, if it exists in the workspace: read it first. Use its
+   configured path, or `%APPDATA%/.lexplosion` when no path is specified.
+   It is authoritative regardless of whether
    `NWCLIENT_HOME` or the standard APPDATA installation exists.
 2. **`NWCLIENT_HOME`**, if set and the installation is complete.
 3. **`%APPDATA%/.lexplosion`**, the normal NWLauncher game-data directory,
    if the installation is complete.
 
-If `deploy.toml` exists but contains an invalid directory, the launch fails
-with a descriptive error; it will **not silently fall back** to some other
-installation. If no valid automatic installation exists and `deploy.toml`
-is absent, the tool instructs the developer to create it.
+If `deploy.toml` exists, it is always read. Explicit installation paths
+override all automatic detection. **If the file does not specify any game
+location**, its unspecified path defaults to `%APPDATA%/.lexplosion` —
+there is no need to edit the file just to set the standard path.
+
+An explicitly configured but invalid directory produces an error instead
+of silently launching a different installation. Invalid TOML also produces
+an error. If no `deploy.toml` exists, discovery falls back to
+`NWCLIENT_HOME`, then `%APPDATA%/.lexplosion`.
 
 The minimal private override is:
 
