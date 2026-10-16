@@ -4,21 +4,26 @@ plugins {
 
 description = 'Experimental NWClient multi-project developer workspace'
 
-// This target intentionally does not remap or package artifacts.
-// It allows incremental compilation of Cosmetic and its project dependencies.
-tasks.register('devClasses') {
-    group = 'nwclient dev'
-    description = 'Incrementally compile Cosmetics and its required project dependencies'
-    dependsOn(':Cosmetics:classes')
+// Ensure Windows default charset does not corrupt UTF-8 Java source files.
+// The original projects remain independent; this setting applies only when
+// compiling them through the unified workspace.
+subprojects {
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+    }
 }
 
-// Full existing project build path. Current child builds also run their
-// postBuild tasks (including remapping) on Windows; optimization is separate.
+tasks.register('devClasses') {
+    group = 'nwclient dev'
+    description = 'Incrementally compile Cosmetics, Runtime and their dependencies'
+    dependsOn(':Cosmetics:classes', ':MinecraftApi.Runtime:classes')
+}
+
 tasks.register('devBuild') {
     group = 'nwclient dev'
     description = 'Build NWClient projects using their existing Gradle tasks'
     dependsOn(':LaunchLinker:build', ':MinecraftApi:build', ':MinecraftApi.Runtime:build', ':Cosmetics:build')
 }
 
-// Deployment/launch remain in build.py for now, pending a verified launch
-// profile and safe credential handling.
+// Launch and deploy remain separate until their native runtime configuration
+// and credentials can be handled safely.
