@@ -1,0 +1,12 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="NWClient - Minecraft Debug" type="Remote" factoryName="Remote JVM Debug">
+    <option name="USE_SOCKET_TRANSPORT" value="true" />
+    <option name="SERVER_MODE" value="false" />
+    <option name="HOST" value="127.0.0.1" />
+    <option name="PORT" value="5005" />
+    <option name="AUTO_RESTART" value="false" />
+    <method v="2">
+      <option name="RunConfigurationTask" enabled="true" run_configuration_name="NWClient - Start Debug JVM" run_configuration_type="GradleRunConfiguration" />
+    </method>
+  </configuration>
+</component>

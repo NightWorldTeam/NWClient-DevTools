@@ -78,6 +78,48 @@ paths refer to the same installation. The offline dev tasks read only
 installation paths from `deploy.toml`; they ignore any stored launcher
 command, Java setting, or authentication tokens.
 
+## IntelliJ IDEA Community Edition 2025.2 — Debug/F5
+
+This workspace is configured for **IntelliJ IDEA Community 2025.2.x on Windows**.
+Open the **workspace root directory** (the folder with `settings.gradle`)
+using **File → Open**, import it as a Gradle project and use JDK 17.
+
+Two shared configurations are committed in `.run/`:
+
+- `NWClient - Start Debug JVM` (Gradle): runs `devDebugStart`, which
+  incrementally compiles and remaps only changed Vanilla JARs, then starts
+  Minecraft with `-agentlib:jdwp=...suspend=y,address=127.0.0.1:5005`.
+  It returns after the JVM has opened the debugger endpoint, leaving Minecraft
+  running. Output: `build/dev-logs/minecraft-debug.log`.
+- `NWClient - Minecraft Debug` (Remote JVM Debug): its **Before Launch →
+  Run Another Configuration** action runs `NWClient - Start Debug JVM`
+  first and then attaches IntelliJ's Java debugger to localhost:5005.
+  This enables Java breakpoints before Minecraft begins executing.
+
+Select **NWClient - Minecraft Debug** from the top Run/Debug selector.
+Use **Shift+F9** (IntelliJ's default Debug shortcut). For Visual-Studio-like
+**F5**, configure IntelliJ **Settings → Keymap → Run → Debug**, add F5,
+and resolve any key conflict. Keymaps are per-user and cannot reliably be
+forced by a project file. This is a one-time IDE preference.
+
+If the `Before Launch` entry did not import into IntelliJ, edit
+`NWClient - Minecraft Debug` → **Modify options → Add before launch task →
+Run Another Configuration**, select `NWClient - Start Debug JVM`,
+and **Store as project file**. The shared Remote configuration should show
+`127.0.0.1:5005` as the target.
+
+Closing the IDE debugger might leave the game open. Close Minecraft
+before a new debug launch, because JDWP port 5005 can be owned by only one
+Minecraft instance. The launcher uses the same installation-path precedence
+and offline identity as `devRun`, and does not change installed JARs.
+
+`devRun` remains available for normal launches. IntelliJ's **Debug**
+button on a Gradle task by itself debugs the Gradle process, not Minecraft;
+use the provided **Remote JVM Debug** configuration.
+
+The IntelliJ configuration files have static XML tests, but
+an actual full F5 → Minecraft debugging run is not yet Windows-verified.
+
 ## Plug-and-play Windows development
 
 With no override file, the default tasks are **configuration-free**:

@@ -150,3 +150,16 @@ tasks.register('devCheck', Exec) {
     args 'nwclient_dev.py', 'check'
     environment 'NW_DEV_JAVA', new File(System.getProperty('java.home'), 'bin/java.exe').absolutePath
 }
+
+
+// IntelliJ IDEA 2025.2 F5: prepare, start Minecraft with suspend=y,
+// return when JDWP is ready; IDE's Remote JVM Debug can then attach.
+tasks.register('devDebugStart', Exec) {
+    group = 'nwclient dev'
+    description = 'Start suspended Minecraft JVM for IntelliJ remote attach'
+    dependsOn 'devPrepare'
+    workingDir rootProject.projectDir
+    executable pythonExe.get()
+    args 'nwclient_debug_start.py'
+    environment 'NW_DEV_JAVA', new File(System.getProperty('java.home'), 'bin/java.exe').absolutePath
+}
